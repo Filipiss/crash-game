@@ -16,8 +16,10 @@ const DEV_PORT = 3001;
 const PORT = process.argv.includes("--dev") ? DEV_PORT : Number(process.env.PORT ?? DEV_PORT);
 
 // O jogo roda no servidor, sozinho, independente de ter alguém conectado.
-const game = new CrashGame();
+// O jogo decide QUANTO pagar; a carteira credita (injeção de dependência: o jogo
+// não conhece a carteira, só recebe uma função "pague X para o jogador Y").
 const players = new PlayerStore();
+const game = new CrashGame((playerId, cents) => players.creditById(playerId, cents));
 
 const app = express();
 // gzip nas respostas HTTP: o JS do jogo cai de ~551 KB para ~168 KB na rede.
@@ -56,7 +58,10 @@ game.onEvent((msg) => {
       console.log(`[rodada ${msg.roundId}] ${msg.bet.playerName} apostou ${msg.bet.amountCents} centavos`);
       break;
     case "cashout":
-      console.log(`[rodada ${msg.roundId}] cash-out em ${msg.multiplier}x (${msg.payoutCents} centavos)`);
+      console.log(
+        `[rodada ${msg.roundId}] ${msg.win.playerName} saiu em ${msg.win.multiplier}x` +
+          `${msg.win.auto ? " (auto)" : ""}: ${msg.win.payoutCents} centavos`,
+      );
       break;
     // "tick" acontece 10x por segundo: não vamos poluir o console com ele.
   }

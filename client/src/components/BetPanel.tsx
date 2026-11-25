@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import { MAX_BET_CENTS, MIN_BET_CENTS } from "../../../shared/api.ts";
+import { MAX_AUTO_CASHOUT, MAX_BET_CENTS, MIN_AUTO_CASHOUT, MIN_BET_CENTS } from "../../../shared/api.ts";
 import { floorMultiplier } from "../../../shared/crash-math.ts";
 import type { PublicBet } from "../../../shared/protocol.ts";
-import { centsToInput, formatCents, formatMultiplier, parseInputToCents } from "../format.ts";
+import { centsToInput, formatCents, formatMultiplier, parseInputToCents, parseMultiplierInput } from "../format.ts";
 import type { GameState } from "../game/state.ts";
+
+/** O que o jogador quer apostar (agora ou na próxima rodada). */
+export interface BetIntent {
+  amountCents: number;
+  autoCashoutAt: number | null;
+}
 
 interface Props {
   game: GameState;
   myBet: PublicBet | null;
+  myAutoTarget: number | null;
+  queued: BetIntent | null;
   balanceCents: number | null;
   connected: boolean;
   pending: boolean;
-  onBet: (amountCents: number) => void;
+  onBet: (intent: BetIntent) => void;
+  onCancelQueued: () => void;
   onCashout: () => void;
   onRefill: () => void;
 }
@@ -20,16 +29,21 @@ interface Props {
 interface MainAction {
   label: string;
   sub: string;
-  kind: "bet" | "cashout" | "waiting" | "won" | "refill";
+  kind: "bet" | "cashout" | "waiting" | "won" | "refill" | "queued";
   onClick?: () => void;
 }
 
-const QUICK_AMOUNTS = [500, 1_000, 5_000, 10_000];
+const AUTO_PRESETS = [1.5, 2, 10];
 
-export function BetPanel({ game, myBet, balanceCents, connected, pending, onBet, onCashout, onRefill }: Props) {
+export function BetPanel(props: Props) {
+  const { game, myBet, myAutoTarget, queued, balanceCents, connected, pending } = props;
   const [amountText, setAmountText] = useState(centsToInput(1_000));
-  const amountCents = parseInputToCents(amountText);
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [autoText, setAutoText] = useState("2,00");
+
   const balance = balanceCents ?? 0;
+  const amountCents = parseInputToCents(amountText);
+  const autoValue = parseMultiplierInput(autoText);
 
   // Validação no cliente = feedback IMEDIATO para o jogador.
   // (O servidor valida de novo: a validação do cliente é UX, não segurança.)
@@ -39,10 +53,29 @@ export function BetPanel({ game, myBet, balanceCents, connected, pending, onBet,
   else if (amountCents > MAX_BET_CENTS) amountError = `Máximo ${formatCents(MAX_BET_CENTS)}`;
   else if (amountCents > balance) amountError = "Saldo insuficiente";
 
+  let autoError: string | null = null;
+  if (autoEnabled && (autoValue === null || autoValue < MIN_AUTO_CASHOUT || autoValue > MAX_AUTO_CASHOUT)) {
+    autoError = `Auto entre ${MIN_AUTO_CASHOUT}x e ${MAX_AUTO_CASHOUT}x`;
+  }
+
+  const intent: BetIntent | null =
+    amountError || autoError || amountCents === null ? null : { amountCents, autoCashoutAt: autoEnabled ? autoValue : null };
+
   const setAmount = (cents: number) => setAmountText(centsToInput(Math.max(MIN_BET_CENTS, Math.min(MAX_BET_CENTS, cents))));
+  const autoLabel = (target: number | null) => (target !== null ? ` · auto ${formatMultiplier(target)}` : "");
 
   const action = getMainAction();
   const disabled = !action.onClick || pending || !connected;
+
+  function betAction(nextRound: boolean): MainAction {
+    if (balance < MIN_BET_CENTS) return { label: "Recarregar fichas", sub: "seu saldo acabou", kind: "refill", onClick: props.onRefill };
+    return {
+      label: nextRound ? "Apostar (próxima rodada)" : "Apostar",
+      sub: amountError ?? autoError ?? `${formatCents(amountCents ?? 0)}${autoLabel(intent?.autoCashoutAt ?? null)}`,
+      kind: "bet",
+      onClick: intent ? () => props.onBet(intent) : undefined,
+    };
+  }
 
   function getMainAction(): MainAction {
     if (!connected) return { label: "Conectando…", sub: "aguarde", kind: "waiting" };
@@ -52,27 +85,29 @@ export function BetPanel({ game, myBet, balanceCents, connected, pending, onBet,
       const payout = Math.floor(myBet.amountCents * myBet.cashedOutAt);
       return { label: `Você saiu em ${formatMultiplier(myBet.cashedOutAt)}`, sub: `+${formatCents(payout)}`, kind: "won" };
     }
+    if (queued) {
+      return {
+        label: "Cancelar aposta",
+        sub: `${formatCents(queued.amountCents)}${autoLabel(queued.autoCashoutAt)} na próxima rodada`,
+        kind: "queued",
+        onClick: props.onCancelQueued,
+      };
+    }
 
     switch (game.phase) {
       case "betting":
-        if (myBet) return { label: "Aposta feita", sub: "aguardando decolagem…", kind: "waiting" };
-        if (balance < MIN_BET_CENTS) return { label: "Recarregar fichas", sub: "saldo acabou", kind: "refill", onClick: onRefill };
-        return {
-          label: "Apostar",
-          sub: amountError ?? (amountCents !== null ? formatCents(amountCents) : ""),
-          kind: "bet",
-          onClick: amountError || amountCents === null ? undefined : () => onBet(amountCents),
-        };
+        if (myBet) return { label: "Aposta feita", sub: `aguardando decolagem…${autoLabel(myAutoTarget)}`, kind: "waiting" };
+        return betAction(false);
       case "running":
         if (myBet) {
           // Valor confirmado pelo servidor (último tick), não o interpolado, e arredondado
           // para baixo com a MESMA regra que o servidor usa para pagar: nunca prometemos a mais.
           const potential = Math.floor(myBet.amountCents * floorMultiplier(game.multiplier));
-          return { label: "Cash out", sub: formatCents(potential), kind: "cashout", onClick: onCashout };
+          return { label: "Cash out", sub: `${formatCents(potential)}${autoLabel(myAutoTarget)}`, kind: "cashout", onClick: props.onCashout };
         }
-        return { label: "Rodada em andamento", sub: "aposte na próxima", kind: "waiting" };
+        return betAction(true);
       case "crashed":
-        return { label: "Próxima rodada", sub: "em instantes…", kind: "waiting" };
+        return betAction(true);
     }
   }
 
@@ -94,37 +129,82 @@ export function BetPanel({ game, myBet, balanceCents, connected, pending, onBet,
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const canEditAmount = game.phase !== "running" && !myBet;
+  // Com aposta em jogo (ou agendada), os campos travam: o que vale é o que foi enviado.
+  const locked = myBet !== null || queued !== null;
 
   return (
-    <section className="panel bet-panel">
-      <div className="amount">
-        <label className="amount-field">
-          <span>Valor da aposta</span>
-          <div className="amount-input">
-            <span className="currency">R$</span>
-            <input
-              inputMode="decimal" // teclado numérico no celular
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              onBlur={() => amountCents !== null && setAmountText(centsToInput(amountCents))}
-              disabled={!canEditAmount}
-              aria-invalid={amountError !== null}
-            />
-            <button type="button" onClick={() => amountCents && setAmount(Math.floor(amountCents / 2))} disabled={!canEditAmount}>
+    <section className="bet-panel">
+      <header className="card-title">
+        <span className="title-dot" /> Aposta
+      </header>
+
+      <label className="field">
+        <span className="field-label">Valor da aposta</span>
+        <div className="input-row" data-invalid={amountError !== null}>
+          <span className="input-prefix">R$</span>
+          <input
+            inputMode="decimal" // teclado numérico no celular
+            value={amountText}
+            onChange={(e) => setAmountText(e.target.value)}
+            onBlur={() => amountCents !== null && setAmountText(centsToInput(amountCents))}
+            disabled={locked}
+            aria-label="Valor da aposta"
+          />
+          <div className="chips">
+            <button type="button" onClick={() => amountCents && setAmount(Math.floor(amountCents / 2))} disabled={locked}>
               ½
             </button>
-            <button type="button" onClick={() => amountCents && setAmount(Math.min(balance, amountCents * 2))} disabled={!canEditAmount}>
+            <button type="button" onClick={() => amountCents && setAmount(Math.min(balance, amountCents * 2))} disabled={locked}>
               2×
             </button>
-          </div>
-        </label>
-        <div className="quick">
-          {QUICK_AMOUNTS.map((cents) => (
-            <button key={cents} type="button" onClick={() => setAmount(cents)} disabled={!canEditAmount}>
-              {formatCents(cents).replace(",00", "")}
+            <button type="button" className="chip-strong" onClick={() => setAmount(balance)} disabled={locked || balance < MIN_BET_CENTS}>
+              Máx
             </button>
-          ))}
+          </div>
+        </div>
+      </label>
+
+      <div className="field">
+        <div className="field-label field-label-row">
+          <span>Auto cash out</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoEnabled}
+            className={`switch ${autoEnabled ? "on" : ""}`}
+            onClick={() => setAutoEnabled((v) => !v)}
+            disabled={locked}
+            aria-label="Ativar auto cash out"
+          >
+            <span className="switch-knob" />
+          </button>
+        </div>
+        <div className="input-row" data-invalid={autoError !== null} data-off={!autoEnabled}>
+          <span className="input-prefix">x</span>
+          <input
+            inputMode="decimal"
+            value={autoText}
+            onChange={(e) => setAutoText(e.target.value)}
+            onFocus={() => setAutoEnabled(true)}
+            disabled={locked}
+            aria-label="Multiplicador do auto cash out"
+          />
+          <div className="chips">
+            {AUTO_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={autoEnabled && autoValue === preset ? "chip-strong" : ""}
+                onClick={() => {
+                  setAutoText(preset.toFixed(2).replace(".", ","));
+                  setAutoEnabled(true);
+                }}
+                disabled={locked}
+              >
+                {preset}x
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -133,7 +213,7 @@ export function BetPanel({ game, myBet, balanceCents, connected, pending, onBet,
         <span className="action-sub">{action.sub}</span>
       </button>
       <p className="hint">
-        Dica: <kbd>Espaço</kbd> aposta e faz cash out
+        <kbd>Espaço</kbd> aposta e faz cash out
       </p>
     </section>
   );

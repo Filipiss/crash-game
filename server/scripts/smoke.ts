@@ -78,3 +78,21 @@ const me = await api<PlayerDTO>("GET", "/players/me", token);
 const { history } = await api<HistoryResponse>("GET", "/history");
 console.log(`✓ saldo final: ${me.balanceCents} centavos`);
 console.log(`✓ histórico: ${history.map((m) => m.toFixed(2) + "x").join("  ")}`);
+
+// Auto cash-out: o SERVIDOR sai sozinho, exatamente no alvo, sem nenhum pedido do cliente.
+const AUTO = 1.2;
+await expectError("auto cash-out inválido", "INVALID_AUTO_CASHOUT", () =>
+  api("POST", "/bet", token, { amountCents: 1000, autoCashoutAt: 0.5 }),
+);
+await waitFor((r) => r.phase === "betting" && r.bettingMsLeft > 1000);
+const autoBet = await api<BetResponse>("POST", "/bet", token, { amountCents: 1000, autoCashoutAt: AUTO });
+const ended = await waitFor((r) => r.phase === "crashed");
+const afterAuto = (await api<PlayerDTO>("GET", "/players/me", token)).balanceCents;
+const reached = ended.crashPoint! >= AUTO;
+const expected = autoBet.balanceCents + (reached ? Math.floor(1000 * AUTO) : 0);
+const autoOk = afterAuto === expected;
+if (!autoOk) process.exitCode = 1;
+console.log(
+  `${autoOk ? "✓" : "✗"} auto cash-out em ${AUTO}x com crash em ${ended.crashPoint}x: ` +
+    `${reached ? "pagou sozinho" : "não chegou no alvo"}, saldo ${afterAuto} (esperado ${expected})`,
+);

@@ -7,6 +7,8 @@ export type RoundPhase = "betting" | "running" | "crashed";
 
 /** Quantos crashes anteriores guardamos/mostramos. */
 export const HISTORY_SIZE = 20;
+/** Quantos ganhadores recentes guardamos/mostramos. */
+export const WINNERS_SIZE = 10;
 
 /** Uma aposta como TODOS os jogadores podem vê-la (sem nada secreto). */
 export interface PublicBet {
@@ -15,6 +17,20 @@ export interface PublicBet {
   amountCents: number;
   /** Multiplicador em que saiu, ou null se ainda está "no foguete". */
   cashedOutAt: number | null;
+}
+
+/** Um cash-out que deu lucro, para a tabela "Ganhadores ao vivo". */
+export interface Winner {
+  roundId: number;
+  playerId: string;
+  playerName: string;
+  amountCents: number;
+  multiplier: number;
+  payoutCents: number;
+  /** Saiu sozinho pelo auto cash-out (true) ou clicando (false)? */
+  auto: boolean;
+  /** Horário do servidor (epoch ms). Só para exibir "às 14:32". */
+  at: number;
 }
 
 /** Foto do estado atual da rodada (enviada para quem acabou de conectar). */
@@ -36,11 +52,12 @@ export interface RoundSnapshot {
  */
 export type ServerMessage =
   // Enviada UMA vez, logo ao conectar (ou reconectar): o estado completo.
-  | { type: "snapshot"; round: RoundSnapshot; history: number[]; bets: PublicBet[] }
+  | { type: "snapshot"; round: RoundSnapshot; history: number[]; bets: PublicBet[]; winners: Winner[]; online: number }
   // A partir daí, só as MUDANÇAS (deltas):
   | { type: "betting"; roundId: number; durationMs: number }
   | { type: "running"; roundId: number }
   | { type: "tick"; roundId: number; elapsedMs: number; multiplier: number }
   | { type: "crashed"; roundId: number; crashPoint: number }
   | { type: "bet"; roundId: number; bet: PublicBet }
-  | { type: "cashout"; roundId: number; playerId: string; multiplier: number; payoutCents: number };
+  | { type: "cashout"; roundId: number; win: Winner }
+  | { type: "presence"; online: number };

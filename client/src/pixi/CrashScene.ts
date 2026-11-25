@@ -2,18 +2,21 @@ import { Application, BitmapText, Container, Graphics, Sprite, Text, type Textur
 import { floorMultiplier, msToReach, multiplierAt } from "../../../shared/crash-math.ts";
 import type { RoundPhase } from "../../../shared/protocol.ts";
 import type { GameState } from "../game/state.ts";
+import { makePlanetTexture, PLANET_REFERENCE_HEIGHT, PLANET_TEXTURE_SCALE, PLANETS } from "./space.ts";
 
 const COLORS = {
-  bg: 0x0b1020,
-  grid: 0x1c2540,
-  label: 0x64748b,
-  curve: 0x22d3ee,
-  crash: 0xef4444,
-  text: 0xf8fafc,
-  smoke: 0x94a3b8,
+  grid: 0xc4b5fd, // lilás bem transparente sobre o espaço
+  label: 0x9d97c7,
+  curve: 0x4ade80,
+  crash: 0xf87171,
+  text: 0xf0fdf4,
+  smoke: 0xe9d5ff,
+  star: [0xffffff, 0xe0e7ff, 0xfef3c7, 0xf5d0fe],
   fire: [0xfde047, 0xf97316, 0xef4444, 0xffffff],
 };
-const PAD = { left: 52, right: 28, top: 28, bottom: 28 };
+// top maior: as "pílulas" do histórico (HTML) ficam por cima do canvas nessa faixa
+const PAD = { left: 48, right: 28, top: 58, bottom: 34 };
+const STAR_COUNT = 110;
 const MAX_PARTICLES = 300;
 const CURVE_SAMPLES = 64;
 /** Abra a página com ?debug para ver FPS e contadores (útil para testar no celular). */
@@ -50,6 +53,22 @@ interface Particle {
   startScale: number;
   endScale: number;
   startAlpha: number;
+}
+
+/**
+ * Objeto do fundo (estrela ou planeta): flutua devagar e acelera quando o foguete voa.
+ * depth 0..1 = profundidade. Mais perto = passa mais rápido (parallax).
+ */
+interface SpaceObject {
+  sprite: Sprite;
+  depth: number;
+  /** Planetas: raio como fração da altura da tela (para escalar no resize). Estrelas: 0. */
+  radius: number;
+  spin: number;
+  /** Estrelas piscam: brilho base, velocidade e fase da oscilação. */
+  baseAlpha: number;
+  twinkleSpeed: number;
+  twinklePhase: number;
 }
 
 interface Rect {
@@ -91,8 +110,13 @@ export class CrashScene {
 
   // Camadas (a ordem de addChild = ordem de desenho, de trás para frente)
   private readonly world = new Container(); // tudo que treme na explosão
+  private readonly backdrop = new Container(); // estrelas + planetas do fundo
+  private readonly stars: SpaceObject[] = [];
+  private readonly planets: SpaceObject[] = [];
+  private readonly planetTextures: Texture[] = [];
   private readonly grid = new Graphics();
   private readonly labels: Text[] = [];
+  private readonly timeLabels: Text[] = [];
   private readonly area = new Graphics();
   private readonly line = new Graphics();
   private readonly particleLayer = new Container();
@@ -137,7 +161,7 @@ export class CrashScene {
    */
   async mount(host: HTMLElement): Promise<void> {
     await this.app.init({
-      background: COLORS.bg,
+      backgroundAlpha: 0, // transparente: o fundo do card (CSS) aparece por trás
       antialias: true,
       resizeTo: host,
       // Telas retina têm devicePixelRatio 3. Renderizar em 3x custa 9x os pixels
@@ -169,6 +193,7 @@ export class CrashScene {
     this.ready = false;
     for (const sprite of this.pool) sprite.destroy();
     this.particleTexture.destroy(true);
+    for (const texture of this.planetTextures) texture.destroy(true);
     this.app.destroy(true, { children: true });
   }
 
@@ -183,8 +208,12 @@ export class CrashScene {
       const label = new Text({ text: "", style: { fontFamily: "system-ui, sans-serif", fontSize: 12, fill: COLORS.label } });
       label.anchor.set(1, 0.5);
       this.labels.push(label);
+      const timeLabel = new Text({ text: "", style: { fontFamily: "system-ui, sans-serif", fontSize: 12, fill: COLORS.label } });
+      timeLabel.anchor.set(0.5, 0);
+      this.timeLabels.push(timeLabel);
     }
 
+    this.buildSpace();
     this.buildRocket();
 
     // BitmapText: as letras viram uma textura pronta. Trocar o texto todo frame é
@@ -197,7 +226,7 @@ export class CrashScene {
     this.caption.anchor.set(0.5);
 
     this.hud.addChild(this.caption, this.multiplierText, this.progressBar);
-    this.world.addChild(this.grid, ...this.labels, this.area, this.line, this.particleLayer, this.rocket);
+    this.world.addChild(this.backdrop, this.grid, ...this.labels, ...this.timeLabels, this.area, this.line, this.particleLayer, this.rocket);
     this.app.stage.addChild(this.world, this.hud);
 
     if (DEBUG) {
@@ -207,14 +236,104 @@ export class CrashScene {
     }
   }
 
-  /** Foguete desenhado com formas geométricas (apontando para a direita). */
+  /**
+   * O espaço: estrelas (reaproveitando a textura de círculo das partículas, então
+   * entram no mesmo batch da GPU) e planetas com textura gerada em space.ts.
+   */
+  private buildSpace(): void {
+    const { width, height } = this.app.screen;
+
+    for (let i = 0; i < STAR_COUNT; i++) {
+      const sprite = new Sprite(this.particleTexture);
+      sprite.anchor.set(0.5);
+      const depth = 0.05 + Math.random() * 0.45; // estrelas estão "longe": parallax lento
+      sprite.scale.set(0.04 + depth * 0.32); // raio de ~0.3px a ~1.6px
+      sprite.tint = COLORS.star[i % COLORS.star.length]!;
+      sprite.position.set(Math.random() * width, Math.random() * height);
+      this.backdrop.addChild(sprite);
+      this.stars.push({
+        sprite,
+        depth,
+        radius: 0,
+        spin: 0,
+        baseAlpha: 0.35 + Math.random() * 0.6,
+        twinkleSpeed: 0.8 + Math.random() * 2.5,
+        twinklePhase: Math.random() * Math.PI * 2,
+      });
+    }
+
+    PLANETS.forEach((spec, i) => {
+      const texture = makePlanetTexture(spec, i + 7);
+      this.planetTextures.push(texture);
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(spec.x * width, spec.y * height);
+      // Um pouco apagados: são cenário, não podem competir com a curva e o número.
+      sprite.alpha = 0.55 + spec.depth * 0.3;
+      this.backdrop.addChild(sprite);
+      this.planets.push({
+        sprite,
+        depth: spec.depth,
+        radius: spec.radius,
+        spin: (Math.random() - 0.5) * 0.04, // giro bem lento
+        baseAlpha: 1,
+        twinkleSpeed: 0,
+        twinklePhase: 0,
+      });
+    });
+  }
+
+  /**
+   * Parallax: tudo "passa" para a esquerda/baixo, como se a câmera subisse com o
+   * foguete. Mais perto (depth alto) = mais rápido. Em voo, acelera com o multiplicador.
+   */
+  private updateSpace(dt: number, phase: RoundPhase, mult: number, now: number): void {
+    const { width, height } = this.app.screen;
+    const seconds = dt / 1000;
+    const speed = phase === "running" ? 60 + Math.min(260, (mult - 1) * 80) : 10;
+    // Planetas escalam com a ALTURA da tela (textura gerada em PLANET_REFERENCE_HEIGHT, 2x pixels)
+    const planetScale = height / PLANET_REFERENCE_HEIGHT / PLANET_TEXTURE_SCALE;
+
+    const move = (obj: SpaceObject, margin: number) => {
+      const s = obj.sprite;
+      s.x -= speed * obj.depth * seconds;
+      s.y += speed * 0.4 * obj.depth * seconds;
+      // Saiu da tela? Volta pelo lado oposto (reaproveita o objeto, nada é criado).
+      if (s.x < -margin) {
+        s.x = width + margin;
+        // Planetas grandes voltam perto da borda de cima ou de baixo: no meio
+        // eles brigariam com a curva e o multiplicador pela atenção do jogador.
+        const big = obj.radius >= 0.1;
+        s.y = big ? (Math.random() < 0.5 ? Math.random() * 0.2 : 0.85 + Math.random() * 0.2) * height : Math.random() * height;
+      }
+      if (s.y > height + margin) {
+        s.y = -margin;
+        s.x = Math.random() * width;
+      }
+    };
+
+    for (const star of this.stars) {
+      move(star, 4);
+      star.sprite.alpha = star.baseAlpha * (0.6 + 0.4 * Math.sin(now / 1000 * star.twinkleSpeed + star.twinklePhase));
+    }
+    for (const planet of this.planets) {
+      planet.sprite.scale.set(planetScale);
+      planet.sprite.rotation += planet.spin * seconds;
+      move(planet, planet.sprite.width / 2);
+    }
+  }
+
+  /** Foguete desenhado com formas geométricas (apontando para a direita), no tema verde. */
   private buildRocket(): void {
-    this.flame.poly([-18, -5, -34, 0, -18, 5]).fill(0xf97316).poly([-18, -3, -27, 0, -18, 3]).fill(0xfde047);
+    this.flame.poly([-20, -6, -40, 0, -20, 6]).fill(0xf97316).poly([-20, -3, -31, 0, -20, 3]).fill(0xfde047);
     const body = new Graphics()
-      .poly([-24, -7, -10, -7, -18, -16]).fill(0xef4444) // aleta de cima
-      .poly([-24, 7, -10, 7, -18, 16]).fill(0xef4444) // aleta de baixo
-      .poly([-20, -8, 8, -8, 22, 0, 8, 8, -20, 8]).fill(0xe5e7eb) // corpo
-      .circle(4, 0, 4).fill(0x38bdf8); // janelinha
+      .poly([-26, -8, -10, -8, -20, -19]).fill(0x16a34a) // aleta de cima
+      .poly([-26, 8, -10, 8, -20, 19]).fill(0x16a34a) // aleta de baixo
+      .poly([-22, -9, 8, -9, 25, 0, 8, 9, -22, 9]).fill(0xdcfce7) // corpo
+      .poly([8, -9, 25, 0, 8, 9]).fill(0x4ade80) // bico
+      .rect(-22, -2, 30, 4).fill({ color: 0x16a34a, alpha: 0.5 }) // faixa
+      .circle(0, 0, 4.5).fill(0x14532d) // janelinha (moldura)
+      .circle(0, 0, 3).fill(0x86efac); // janelinha
     this.rocket.addChild(this.flame, body);
   }
 
@@ -257,6 +376,7 @@ export class CrashScene {
     this.viewMaxM = Math.max(ease(this.viewMaxM, targetM, dt, 150), mult * 1.02);
 
     // 3) Desenho
+    this.updateSpace(dt, state.phase, mult, now);
     this.drawGrid(plot);
     this.drawCurve(plot, state.phase, elapsed);
     this.updateRocket(plot, state.phase, elapsed, now, dt);
@@ -339,7 +459,23 @@ export class CrashScene {
     }
     for (; i < this.labels.length; i++) this.labels[i]!.visible = false;
 
-    g.stroke({ width: 1, color: COLORS.grid });
+    // Eixo X: segundos de voo (2s, 4s, 6s...), com passo "bonito" que cresce junto com a câmera
+    const seconds = this.viewMaxT / 1000;
+    const tStep = niceStep(seconds / 5);
+    const axisY = plot.y + plot.h + 10;
+    let j = 0;
+    for (let k = 1; j < this.timeLabels.length; k++, j++) {
+      const t = k * tStep;
+      if (t > seconds) break;
+      const label = this.timeLabels[j]!;
+      const text = `${t}s`;
+      if (label.text !== text) label.text = text;
+      label.position.set(this.xOf(t * 1000, plot), axisY);
+      label.visible = true;
+    }
+    for (; j < this.timeLabels.length; j++) this.timeLabels[j]!.visible = false;
+
+    g.stroke({ width: 1, color: COLORS.grid, alpha: 0.08 });
   }
 
   private drawCurve(plot: Rect, phase: RoundPhase, elapsed: number): void {
@@ -372,7 +508,7 @@ export class CrashScene {
       return;
     }
     this.rocket.visible = true;
-    const scale = Math.min(1.2, Math.max(0.7, plot.w / 600));
+    const scale = Math.min(1.6, Math.max(0.85, plot.w / 480));
     this.rocket.scale.set(scale);
 
     if (phase === "betting") {
@@ -433,7 +569,7 @@ export class CrashScene {
       const barW = 260 * hudScale;
       const barY = cy + 62 * hudScale;
       this.progressBar
-        .roundRect(cx - barW / 2, barY, barW, 6, 3).fill({ color: COLORS.grid })
+        .roundRect(cx - barW / 2, barY, barW, 6, 3).fill({ color: COLORS.grid, alpha: 0.18 })
         .roundRect(cx - barW / 2, barY, barW * Math.min(1, msLeft / total), 6, 3).fill({ color: COLORS.curve });
     } else if (state.phase === "running") {
       // floor, não toFixed: toFixed ARREDONDA (1.175 -> "1.18") e mostraria mais do que o servidor paga.
@@ -568,6 +704,6 @@ export class CrashScene {
       `${stats.fps} fps · frame p95 ${stats.frameMsP95.toFixed(1)}ms · máx ${stats.frameMsMax.toFixed(1)}ms\n` +
       `update() ${stats.updateMsAvg.toFixed(2)}ms (p95 ${stats.updateMsP95.toFixed(2)}ms)\n` +
       `${stats.particles} partículas (pool ${stats.pooled}) · ${Math.round(width)}x${Math.round(height)} @${this.app.renderer.resolution}x · ${this.app.renderer.name}`;
-    this.debugText.position.set(width - 8, 6);
+    this.debugText.position.set(width - 8, PAD.top - 4); // abaixo das pílulas do histórico
   }
 }

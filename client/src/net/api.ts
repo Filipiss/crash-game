@@ -50,7 +50,7 @@ export const api = {
   createPlayer: () => request<CreatePlayerResponse>("POST", "/players"),
   me: (token: string) => request<PlayerDTO>("GET", "/players/me", { token }),
   refill: (token: string) => request<PlayerDTO>("POST", "/players/me/refill", { token }),
-  bet: (token: string, amountCents: number) =>
-    request<BetResponse>("POST", "/bet", { token, body: { amountCents } satisfies BetRequest }),
+  bet: (token: string, amountCents: number, autoCashoutAt: number | null) =>
+    request<BetResponse>("POST", "/bet", { token, body: { amountCents, autoCashoutAt } satisfies BetRequest }),
   cashout: (token: string) => request<CashoutResponse>("POST", "/cashout", { token }),
 };

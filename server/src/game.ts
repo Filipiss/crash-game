@@ -1,4 +1,12 @@
-import { HISTORY_SIZE, type PublicBet, type RoundPhase, type RoundSnapshot, type ServerMessage } from "../../shared/protocol.ts";
+import {
+  HISTORY_SIZE,
+  WINNERS_SIZE,
+  type PublicBet,
+  type RoundPhase,
+  type RoundSnapshot,
+  type ServerMessage,
+  type Winner,
+} from "../../shared/protocol.ts";
 import { floorMultiplier, multiplierAt, msToReach } from "../../shared/crash-math.ts";
 import { generateCrashPoint } from "./crash-point.ts";
 import { AppError } from "./errors.ts";
@@ -8,6 +16,13 @@ const CRASHED_PAUSE_MS = 3_000; // pausa mostrando o resultado
 const TICK_MS = 100; // 10 atualizações por segundo pela rede
 
 type Listener = (msg: ServerMessage) => void;
+/** Quem paga o prêmio (a carteira). O jogo decide QUANTO; a carteira só credita. */
+type PayoutFn = (playerId: string, payoutCents: number) => void;
+
+/** A aposta como o SERVIDOR a guarda: o alvo de auto cash-out não é público. */
+interface Bet extends PublicBet {
+  autoCashoutAt: number | null;
+}
 
 /**
  * O loop do jogo. É uma máquina de estados com 3 fases que se repetem:
@@ -25,10 +40,17 @@ export class CrashGame {
   private phaseStartedAt = 0;
   private crashPoint = 1;
   private history: number[] = [];
+  private winners: Winner[] = [];
   private tickTimer: NodeJS.Timeout | null = null;
+  private autoTimers: NodeJS.Timeout[] = [];
   private listeners = new Set<Listener>();
   /** Apostas da rodada atual, uma por jogador. */
-  private bets = new Map<string, PublicBet>();
+  private bets = new Map<string, Bet>();
+  private readonly payout: PayoutFn;
+
+  constructor(payout: PayoutFn) {
+    this.payout = payout;
+  }
 
   start(): void {
     this.startBetting();
@@ -56,9 +78,13 @@ export class CrashGame {
     return [...this.history];
   }
 
-  /** Cópias das apostas: quem chama não consegue alterar o estado interno por acidente. */
+  getWinners(): Winner[] {
+    return this.winners.map((win) => ({ ...win }));
+  }
+
+  /** Cópias PÚBLICAS das apostas: sem o alvo de auto cash-out de ninguém. */
   getBets(): PublicBet[] {
-    return [...this.bets.values()].map((bet) => ({ ...bet }));
+    return [...this.bets.values()].map(toPublic);
   }
 
   /** O jogador ainda tem dinheiro "no foguete" (apostou e não saiu, rodada não acabou)? */
@@ -68,24 +94,24 @@ export class CrashGame {
   }
 
   /** Registra uma aposta. Só é permitido durante a fase "betting". */
-  placeBet(playerId: string, playerName: string, amountCents: number): number {
+  placeBet(playerId: string, playerName: string, amountCents: number, autoCashoutAt: number | null): number {
     if (this.phase !== "betting") {
       throw new AppError("BETTING_CLOSED", "As apostas desta rodada já fecharam. Aguarde a próxima.");
     }
     if (this.bets.has(playerId)) {
       throw new AppError("ALREADY_BET", "Você já apostou nesta rodada.");
     }
-    const bet: PublicBet = { playerId, playerName, amountCents, cashedOutAt: null };
+    const bet: Bet = { playerId, playerName, amountCents, cashedOutAt: null, autoCashoutAt };
     this.bets.set(playerId, bet);
-    this.emit({ type: "bet", roundId: this.roundId, bet: { ...bet } });
+    this.emit({ type: "bet", roundId: this.roundId, bet: toPublic(bet) });
     return this.roundId;
   }
 
   /**
-   * Tira o jogador do foguete no multiplicador ATUAL, calculado pelo relógio do servidor.
+   * Cash-out MANUAL: no multiplicador atual, calculado pelo relógio do servidor.
    * O cliente não diz "saí em 2.5x": ele só pede para sair, e o servidor decide quanto vale.
    */
-  cashOut(playerId: string): { multiplier: number; payoutCents: number } {
+  cashOut(playerId: string): Winner {
     const bet = this.bets.get(playerId);
     if (!bet) {
       throw new AppError("NO_ACTIVE_BET", "Você não tem aposta nesta rodada.");
@@ -103,12 +129,38 @@ export class CrashGame {
     if (multiplier > this.crashPoint) {
       throw new AppError("TOO_LATE", "Tarde demais: o foguete já explodiu.");
     }
+    return this.settle(bet, multiplier, false);
+  }
 
+  /**
+   * ÚNICO lugar onde um prêmio é pago (manual ou automático).
+   * Um caminho só = impossível pagar duas vezes ou com regras diferentes.
+   */
+  private settle(bet: Bet, multiplier: number, auto: boolean): Winner {
     bet.cashedOutAt = multiplier;
     // Centavos inteiros, arredondando para baixo (a favor da casa, nunca do bug).
     const payoutCents = Math.floor(bet.amountCents * multiplier);
-    this.emit({ type: "cashout", roundId: this.roundId, playerId, multiplier, payoutCents });
-    return { multiplier, payoutCents };
+    this.payout(bet.playerId, payoutCents);
+
+    const win: Winner = {
+      roundId: this.roundId,
+      playerId: bet.playerId,
+      playerName: bet.playerName,
+      amountCents: bet.amountCents,
+      multiplier,
+      payoutCents,
+      auto,
+      at: Date.now(),
+    };
+    this.winners = [win, ...this.winners].slice(0, WINNERS_SIZE);
+    this.emit({ type: "cashout", roundId: this.roundId, win: { ...win } });
+    return win;
+  }
+
+  /** Auto cash-out: paga EXATAMENTE o alvo, sem depender de latência de rede. */
+  private autoCashOut(bet: Bet): void {
+    if (this.phase !== "running" || bet.cashedOutAt !== null || bet.autoCashoutAt === null) return;
+    this.settle(bet, bet.autoCashoutAt, true);
   }
 
   private emit(msg: ServerMessage): void {
@@ -142,14 +194,29 @@ export class CrashGame {
       });
     }, TICK_MS);
 
-    // Não precisamos "checar a cada tick se passou do crash":
-    // como a curva é uma fórmula, sabemos exatamente QUANDO ela chega no crashPoint.
+    // Como a curva é uma fórmula, sabemos exatamente QUANDO cada alvo será atingido:
+    // agendamos um timer por aposta automática (só as que vão chegar antes do crash).
+    for (const bet of this.bets.values()) {
+      if (bet.autoCashoutAt !== null && bet.autoCashoutAt <= this.crashPoint) {
+        this.autoTimers.push(setTimeout(() => this.autoCashOut(bet), msToReach(bet.autoCashoutAt)));
+      }
+    }
+
+    // Idem para o crash: um único setTimeout, sem "checar a cada tick".
     setTimeout(() => this.crash(), msToReach(this.crashPoint));
   }
 
   private crash(): void {
     if (this.tickTimer) clearInterval(this.tickTimer);
     this.tickTimer = null;
+
+    // Se um alvo automático e o crash caírem no MESMO milissegundo, a ordem dos timers
+    // não é garantida. Pagamos antes quem tinha direito (alvo <= crashPoint).
+    for (const bet of this.bets.values()) {
+      if (bet.autoCashoutAt !== null && bet.autoCashoutAt <= this.crashPoint) this.autoCashOut(bet);
+    }
+    for (const timer of this.autoTimers) clearTimeout(timer);
+    this.autoTimers = [];
 
     this.phase = "crashed";
     this.phaseStartedAt = Date.now();
@@ -158,4 +225,8 @@ export class CrashGame {
     this.emit({ type: "crashed", roundId: this.roundId, crashPoint: this.crashPoint });
     setTimeout(() => this.startBetting(), CRASHED_PAUSE_MS);
   }
+}
+
+function toPublic(bet: Bet): PublicBet {
+  return { playerId: bet.playerId, playerName: bet.playerName, amountCents: bet.amountCents, cashedOutAt: bet.cashedOutAt };
 }

@@ -11,9 +11,36 @@ export interface Player {
   balanceCents: number;
 }
 
-const ANIMALS = ["Onça", "Tucano", "Arara", "Capivara", "Jaguar", "Sucuri", "Preguiça", "Macaco"];
-const TRAITS = ["Veloz", "Audaz", "Feliz", "Valente", "Sagaz", "Ágil"];
-const pick = <T>(list: T[]): T => list[randomInt(list.length)]!;
+// Apelidos dos jogadores convidados: celebridades (só nomes de exibição, fichas de mentira).
+const FAMOUS_NAMES = [
+  "Neymar",
+  "Marshall Mathers",
+  "Johnny Depp",
+  "MrBeast",
+  "Anitta",
+  "Ronaldinho",
+  "Lionel Messi",
+  "Cristiano Ronaldo",
+  "Vini Jr.",
+  "Keanu Reeves",
+  "Snoop Dogg",
+  "Rihanna",
+  "Taylor Swift",
+  "Drake",
+  "Billie Eilish",
+  "Gaules",
+  "Casimiro",
+  "Ludmilla",
+  "Gisele Bündchen",
+  "The Rock",
+];
+
+/** Sorteia um nome que ninguém conectado está usando; se todos estiverem em uso, acrescenta um número. */
+function pickName(taken: Set<string>): string {
+  const free = FAMOUS_NAMES.filter((name) => !taken.has(name));
+  if (free.length > 0) return free[randomInt(free.length)]!;
+  return `${FAMOUS_NAMES[randomInt(FAMOUS_NAMES.length)]!} ${randomInt(2, 100)}`;
+}
 
 /**
  * Guarda os jogadores EM MEMÓRIA (um Map). Se o servidor reiniciar, tudo some.
@@ -22,15 +49,17 @@ const pick = <T>(list: T[]): T => list[randomInt(list.length)]!;
  */
 export class PlayerStore {
   private byToken = new Map<string, Player>();
+  private byId = new Map<string, Player>(); // o jogo paga prêmios pelo id público
 
   create(): Player {
     const player: Player = {
       id: randomUUID(),
       token: randomUUID(),
-      name: `${pick(ANIMALS)} ${pick(TRAITS)} ${randomInt(10, 100)}`,
+      name: pickName(new Set([...this.byToken.values()].map((p) => p.name))),
       balanceCents: STARTING_BALANCE_CENTS,
     };
     this.byToken.set(player.token, player);
+    this.byId.set(player.id, player);
     return player;
   }
 
@@ -45,8 +74,10 @@ export class PlayerStore {
     player.balanceCents -= cents;
   }
 
-  credit(player: Player, cents: number): void {
-    player.balanceCents += cents;
+  /** Credita um prêmio. Chamado pelo jogo (cash-out manual OU automático). */
+  creditById(playerId: string, cents: number): void {
+    const player = this.byId.get(playerId);
+    if (player) player.balanceCents += cents;
   }
 
   /** Fichas de volta para quem zerou (é um protótipo, não um cassino de verdade). */

@@ -1,6 +1,8 @@
 import { Router, type ErrorRequestHandler, type Request } from "express";
 import {
+  MAX_AUTO_CASHOUT,
   MAX_BET_CENTS,
+  MIN_AUTO_CASHOUT,
   MIN_BET_CENTS,
   type ApiErrorBody,
   type BetResponse,
@@ -43,6 +45,16 @@ export function createApiRouter(game: CrashGame, players: PlayerStore): Router {
     return amount;
   }
 
+  /** Alvo de auto cash-out: opcional; se vier, precisa ser um multiplicador válido. */
+  function parseAutoCashout(req: Request): number | null {
+    const value = (req.body as { autoCashoutAt?: unknown } | undefined)?.autoCashoutAt;
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < MIN_AUTO_CASHOUT || value > MAX_AUTO_CASHOUT) {
+      throw new AppError("INVALID_AUTO_CASHOUT", `O auto cash-out deve ficar entre ${MIN_AUTO_CASHOUT}x e ${MAX_AUTO_CASHOUT}x.`);
+    }
+    return Math.floor(value * 100) / 100; // 2 casas, para baixo (mesma regra do resto)
+  }
+
   router.get("/health", (_req, res) => {
     res.json({ ok: true, time: Date.now() });
   });
@@ -81,23 +93,24 @@ export function createApiRouter(game: CrashGame, players: PlayerStore): Router {
   router.post("/bet", (req, res) => {
     const player = requirePlayer(req);
     const amountCents = parseAmount(req);
+    const autoCashoutAt = parseAutoCashout(req);
     if (amountCents > player.balanceCents) {
       throw new AppError("INSUFFICIENT_FUNDS", "Saldo insuficiente.");
     }
     // Ordem importa: primeiro o jogo aceita (pode lançar erro), só então debitamos.
     // Não há nenhum "await" entre checar e debitar, então nenhum outro pedido
     // consegue se intrometer no meio (o JavaScript roda uma coisa por vez).
-    const roundId = game.placeBet(player.id, player.name, amountCents);
+    const roundId = game.placeBet(player.id, player.name, amountCents, autoCashoutAt);
     players.debit(player, amountCents);
 
-    const body: BetResponse = { roundId, amountCents, balanceCents: player.balanceCents };
+    const body: BetResponse = { roundId, amountCents, autoCashoutAt, balanceCents: player.balanceCents };
     res.status(201).json(body);
   });
 
   router.post("/cashout", (req, res) => {
     const player = requirePlayer(req);
+    // O jogo calcula E paga (via players.creditById): aqui só lemos o saldo novo.
     const { multiplier, payoutCents } = game.cashOut(player.id);
-    players.credit(player, payoutCents);
 
     const body: CashoutResponse = { multiplier, payoutCents, balanceCents: player.balanceCents };
     res.json(body);

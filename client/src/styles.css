@@ -1,23 +1,24 @@
-/* ------------------------------------------------------------ tokens */
+/* ============================================================ tokens */
 :root {
-  --bg: #070b16;
-  --panel: #0f1629;
-  --panel-2: #141d35;
-  --border: #1c2540;
-  --text: #e2e8f0;
-  --muted: #64748b;
-  --cyan: #22d3ee;
-  --green: #22c55e;
-  --green-soft: #4ade80;
+  --bg: #08110d;
+  --card: rgba(20, 31, 27, 0.88);
+  --card-2: rgba(255, 255, 255, 0.04);
+  --field: rgba(0, 0, 0, 0.28);
+  --line: rgba(255, 255, 255, 0.07);
+  --text: #e7f2ec;
+  --muted: #74877e;
+  --lime: #4ade80;
+  --lime-2: #22c55e;
+  --lime-glow: rgba(74, 222, 128, 0.35);
   --orange: #f59e0b;
-  --red: #ef4444;
+  --red: #f87171;
   --gold: #fbbf24;
-  --radius: 14px;
+  --radius: 22px;
 
   color-scheme: dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
+  background: var(--bg);
 }
 
 * {
@@ -27,6 +28,13 @@
 body {
   margin: 0;
   min-height: 100dvh;
+  /* "Selva" ao fundo: manchas de luz verde, sem nenhuma imagem para baixar */
+  background:
+    radial-gradient(ellipse 60% 45% at 12% 0%, rgba(34, 197, 94, 0.2), transparent 70%),
+    radial-gradient(ellipse 45% 40% at 95% 25%, rgba(16, 185, 129, 0.13), transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 110%, rgba(21, 128, 61, 0.18), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
   /* Celulares com "notch": não deixa o conteúdo ficar embaixo das bordas */
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
@@ -35,6 +43,8 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  border: 0;
+  background: none;
   /* Toque: sem atraso de 300ms nem zoom no duplo toque, sem flash azul */
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -44,66 +54,118 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* ------------------------------------------------------------ layout */
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 16px;
-}
-.stage {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
+.muted {
+  color: var(--muted);
 }
 
-/* ------------------------------------------------------------ topbar */
+/* ============================================================ estrutura */
+.topbar,
+.layout {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-areas:
+    "side stage"
+    "winners winners";
+  gap: 18px;
+  padding: 0 20px 28px;
+}
+.side {
+  grid-area: side;
+}
+.stage {
+  grid-area: stage;
+}
+.winners {
+  grid-area: winners;
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(26, 39, 34, 0.92), rgba(15, 24, 21, 0.92));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.title-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 10px var(--lime);
+}
+
+/* ============================================================ topo */
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(15, 22, 41, 0.8);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  backdrop-filter: blur(8px);
+  gap: 16px;
+  padding: 18px 20px;
 }
-.brand {
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: 0.5px;
-}
+.topbar-left,
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
-.wallet {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  letter-spacing: 0.3px;
+}
+.brand strong {
+  color: var(--lime);
+}
+.brand-logo {
+  font-size: 22px;
+}
+
+.rewards {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 8px 10px;
+  border-radius: 16px;
+  text-align: left;
+  background: linear-gradient(120deg, rgba(34, 197, 94, 0.25), rgba(20, 83, 45, 0.35));
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+.rewards:not(:disabled):hover {
+  filter: brightness(1.15);
+}
+.rewards:not(:disabled) {
+  box-shadow: 0 0 18px var(--lime-glow);
+}
+.rewards-icon {
+  font-size: 26px;
+}
+.rewards-text {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   line-height: 1.2;
 }
-.wallet-name {
-  font-size: 12px;
+.rewards-text strong {
+  color: var(--lime);
+  font-size: 14px;
+}
+.rewards-text small {
   color: var(--muted);
+  font-size: 11px;
 }
-.wallet-balance {
-  font-size: 18px;
-  font-variant-numeric: tabular-nums; /* números com largura fixa: o saldo não "dança" */
-}
+
 .conn {
   display: flex;
   align-items: center;
@@ -118,102 +180,127 @@ button:disabled {
   background: var(--orange);
 }
 .conn-open .dot {
-  background: var(--green-soft);
-  box-shadow: 0 0 8px var(--green-soft);
+  background: var(--lime);
+  box-shadow: 0 0 8px var(--lime);
 }
 
-/* ------------------------------------------------------------ histórico */
-.history {
+.balance-pill {
   display: flex;
-  gap: 6px;
-  overflow-x: auto; /* no celular rola para o lado em vez de quebrar linha */
-  scrollbar-width: none;
-  min-height: 28px;
-}
-.history-empty {
-  color: var(--muted);
-  font-size: 13px;
-}
-.pill {
-  flex: none;
-  padding: 4px 10px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 5px 5px 16px;
   border-radius: 999px;
-  font-size: 13px;
+  background: var(--field);
+  border: 1px solid var(--line);
+}
+.balance-value {
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  background: var(--panel-2);
+  font-variant-numeric: tabular-nums; /* números com largura fixa: o saldo não "dança" */
 }
-.pill-low {
-  color: #94a3b8;
+.balance-add {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 18px;
+  line-height: 1;
+  color: #052e16;
+  background: var(--lime);
 }
-.pill-mid {
-  color: var(--green-soft);
+.balance-add:disabled {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
 }
-.pill-high {
-  color: var(--gold);
-  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.4);
+.me-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-
-/* ------------------------------------------------------------ canvas */
-.canvas-wrap {
-  position: relative;
+.me-chip .avatar {
+  box-shadow: 0 0 0 2px var(--lime);
 }
-.game-canvas {
-  width: 100%;
-  height: clamp(260px, 52vh, 480px);
-  border-radius: var(--radius);
-  overflow: hidden;
-  background: #0b1020;
-  border: 1px solid var(--border);
-}
-.canvas-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius);
-  background: rgba(7, 11, 22, 0.7);
+.me-name {
+  font-size: 13px;
   font-weight: 600;
 }
 
-/* ------------------------------------------------------------ painel de aposta */
-.bet-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: stretch;
+/* ============================================================ avatares */
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
-.amount {
+.avatar-stack {
+  display: flex;
+  align-items: center;
+}
+.avatar-stack .avatar {
+  margin-left: -8px;
+  box-shadow: 0 0 0 2px #16221e;
+}
+.avatar-stack .avatar:first-child {
+  margin-left: 0;
+}
+.avatar-more {
+  width: 26px;
+  height: 26px;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ============================================================ painel lateral */
+.side {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+  padding: 18px;
+  gap: 18px;
+  align-self: start;
 }
-.amount-field {
-  display: block;
+.bet-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-.amount-field > span {
-  display: block;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-label {
   font-size: 12px;
   color: var(--muted);
-  margin-bottom: 6px;
 }
-.amount-input {
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.input-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 4px 4px 4px 12px;
+  padding: 5px 5px 5px 12px;
+  border-radius: 14px;
+  background: var(--field);
+  border: 1px solid var(--line);
+  transition: opacity 150ms ease;
 }
-.amount-input:has(input[aria-invalid="true"]) {
+.input-row[data-invalid="true"] {
   border-color: var(--red);
 }
-.currency {
-  color: var(--muted);
+.input-row[data-off="true"] {
+  opacity: 0.55;
 }
-.amount-input input {
+.input-prefix {
+  color: var(--muted);
+  font-weight: 700;
+}
+.input-row input {
   flex: 1;
   min-width: 0;
   background: transparent;
@@ -225,38 +312,70 @@ button:disabled {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.amount-input button,
-.quick button {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  min-width: 40px;
-  min-height: 36px;
+.chips {
+  display: flex;
+  gap: 4px;
+}
+.chips button {
+  min-width: 36px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 12px;
   font-weight: 700;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
 }
-.quick {
-  display: grid;
-  /* minmax(0, 1fr) e não 1fr: "1fr" sozinho tem mínimo = conteúdo e transborda em tela estreita */
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+.chips button:not(:disabled):hover {
+  color: var(--text);
 }
-.quick button {
-  font-size: 13px;
+.chips .chip-strong {
+  color: #052e16;
+  background: var(--lime);
 }
-.amount-input button:disabled,
-.quick button:disabled {
+.chips button:disabled {
   opacity: 0.4;
 }
 
+/* interruptor (switch) do auto cash out */
+.switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  transition: background 150ms ease;
+}
+.switch.on {
+  background: var(--lime-2);
+}
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 150ms ease;
+}
+.switch.on .switch-knob {
+  transform: translateX(16px);
+}
+.switch:disabled {
+  opacity: 0.5;
+}
+
+/* botão principal */
 .action-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  min-height: 72px; /* alvo de toque grande: é o botão mais importante do jogo */
-  border: 0;
-  border-radius: 12px;
+  min-height: 64px; /* alvo de toque grande: é o botão mais importante do jogo */
+  padding: 8px 12px;
+  border-radius: 16px;
   font-weight: 800;
   transition:
     transform 80ms ease,
@@ -266,45 +385,50 @@ button:disabled {
   transform: scale(0.97);
 }
 .action-btn:not(:disabled):hover {
-  filter: brightness(1.1);
+  filter: brightness(1.08);
 }
 .action-label {
-  font-size: 20px;
+  font-size: 17px;
 }
 .action-sub {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.8;
   font-variant-numeric: tabular-nums;
 }
-.action-bet {
-  background: var(--green);
-  color: #052e16;
-}
+.action-bet,
 .action-refill {
-  background: var(--cyan);
-  color: #083344;
-}
-.action-cashout {
-  background: var(--orange);
-  color: #451a03;
-  animation: pulse 0.9s ease-in-out infinite;
-}
-.action-waiting {
-  background: var(--panel-2);
-  color: var(--muted);
-}
-.action-won {
-  background: rgba(34, 197, 94, 0.15);
-  color: var(--green-soft);
-  box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.4);
+  color: #052e16;
+  background: linear-gradient(180deg, #6ee7a0, var(--lime-2));
+  box-shadow: 0 10px 26px var(--lime-glow);
 }
 .action-bet:disabled {
   opacity: 0.5;
+  box-shadow: none;
+}
+.action-cashout {
+  color: #451a03;
+  background: linear-gradient(180deg, #fbbf24, var(--orange));
+  box-shadow: 0 10px 26px rgba(245, 158, 11, 0.35);
+  animation: pulse 0.9s ease-in-out infinite;
+}
+.action-queued {
+  color: var(--lime);
+  background: rgba(74, 222, 128, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.5);
+}
+.action-waiting {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+}
+.action-won {
+  color: var(--lime);
+  background: rgba(74, 222, 128, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.4);
 }
 @keyframes pulse {
   50% {
-    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.25);
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.22);
   }
 }
 /* Quem pede menos movimento no sistema operacional não recebe animações */
@@ -314,90 +438,217 @@ button:disabled {
   }
 }
 .hint {
-  grid-column: 1 / -1;
-  margin: 0;
-  font-size: 12px;
+  margin: -4px 0 0;
+  font-size: 11px;
   color: var(--muted);
   text-align: center;
 }
 kbd {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 4px;
   padding: 1px 5px;
-  font-size: 11px;
+  font-size: 10px;
 }
 .session-error {
   color: var(--red);
   margin: 0;
-}
-
-/* ------------------------------------------------------------ jogadores */
-.players h2 {
-  margin: 0;
-  font-size: 16px;
-}
-.players-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 12px;
-  color: var(--muted);
   font-size: 13px;
 }
-.players ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+
+/* resumo dos jogadores */
+.players-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.summary-right {
+  font-size: 13px;
+  color: var(--muted);
+}
+.summary-right strong {
+  color: var(--lime);
+}
+.bank {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.player {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2px 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--panel-2);
-  font-size: 13px;
+.bank-value {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
 }
-.player-name {
+
+/* ============================================================ palco (canvas) */
+.stage {
+  position: relative;
+  padding: 10px;
+  min-width: 0;
+}
+.game-canvas {
+  width: 100%;
+  height: clamp(320px, 58vh, 520px);
+  border-radius: calc(var(--radius) - 8px);
+  overflow: hidden;
+  /* Céu do espaço: nebulosas em gradiente atrás do canvas transparente do Pixi.
+     No CSS sai de graça (a GPU do navegador compõe); estrelas e planetas são do Pixi. */
+  background:
+    radial-gradient(ellipse 55% 45% at 78% 22%, rgba(168, 85, 247, 0.35), transparent 70%),
+    radial-gradient(ellipse 50% 50% at 18% 75%, rgba(59, 130, 246, 0.28), transparent 70%),
+    radial-gradient(ellipse 35% 30% at 55% 55%, rgba(236, 72, 153, 0.16), transparent 70%),
+    linear-gradient(180deg, #1c1242 0%, #120d33 55%, #0b0824 100%);
+}
+.canvas-overlay {
+  position: absolute;
+  inset: 10px;
+  display: grid;
+  place-items: center;
+  border-radius: calc(var(--radius) - 8px);
+  background: rgba(8, 17, 13, 0.72);
+  font-weight: 600;
+  z-index: 3;
+}
+
+/* histórico em "pílulas", por cima do canvas */
+.history {
+  position: absolute;
+  top: 22px;
+  left: 22px;
+  right: 22px;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto; /* no celular rola para o lado em vez de quebrar linha */
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+.history-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+.pill {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--line);
+}
+.pill-low {
+  color: #9fb1a8;
+}
+.pill-mid {
+  color: var(--lime);
+  border-color: rgba(74, 222, 128, 0.25);
+}
+.pill-high {
+  color: var(--gold);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+/* ============================================================ ganhadores ao vivo */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 10px 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--lime);
+}
+.section-title::before,
+.section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(74, 222, 128, 0.3), transparent);
+}
+.winners-card {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.winners-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) 1fr 1fr 1fr 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  background: var(--card-2);
+  animation: row-in 250ms ease-out;
+}
+.winners-head {
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  animation: none;
+}
+.winners-row.me {
+  box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.35);
+}
+.winner-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.winner-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
 }
-.player-name em {
-  color: var(--cyan);
+.winner-name em {
+  color: var(--lime);
   font-style: normal;
 }
-.player-amount {
+.mult-badge {
+  font-weight: 700;
+}
+.auto-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--lime);
+  background: rgba(74, 222, 128, 0.12);
+}
+.col-right {
   text-align: right;
-  font-variant-numeric: tabular-nums;
 }
-.player-result {
-  grid-column: 1 / -1;
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+.payout {
+  color: var(--lime);
+  font-weight: 700;
 }
-.player.me {
-  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.4);
-}
-.player.won .player-result {
-  color: var(--green-soft);
-}
-.player.lost .player-result {
-  color: var(--red);
-}
-.players-empty {
+.winners-empty {
+  margin: 8px 14px 12px;
   color: var(--muted);
   font-size: 13px;
-  margin: 0;
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 
-/* ------------------------------------------------------------ toasts */
+/* ============================================================ toasts */
 .toasts {
   position: fixed;
   left: 50%;
@@ -412,17 +663,17 @@ kbd {
 }
 .toast {
   padding: 12px 16px;
-  border-radius: 10px;
+  border-radius: 14px;
   font-weight: 600;
   font-size: 14px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  background: #13201b;
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   animation: toast-in 180ms ease-out;
 }
 .toast-win {
-  border-color: var(--green-soft);
-  color: var(--green-soft);
+  border-color: var(--lime);
+  color: var(--lime);
 }
 .toast-loss,
 .toast-error {
@@ -436,44 +687,79 @@ kbd {
   }
 }
 
-/* ------------------------------------------------------------ responsivo */
-/* Tablet / celular deitado: a lista de jogadores desce para baixo do jogo */
+/* ============================================================ responsivo */
+/* Tablet / celular deitado: o jogo vem primeiro, o painel de aposta logo abaixo */
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
-    padding: 12px;
+    grid-template-areas:
+      "stage"
+      "side"
+      "winners";
     gap: 12px;
+    padding: 0 12px 20px;
+  }
+  .rewards-text small,
+  .me-name {
+    display: none;
   }
 }
 
-/* Celular em pé: tudo empilhado, canvas mais baixo para o botão caber na tela */
+/* Celular em pé */
 @media (max-width: 600px) {
   .topbar {
-    padding: 10px 12px;
+    padding: 12px;
+    gap: 8px;
   }
-  .conn-label {
+  .topbar-left,
+  .topbar-right {
+    gap: 8px;
+  }
+  .brand span:last-child,
+  .conn-label,
+  .rewards-text {
     display: none;
   }
+  .rewards {
+    padding: 6px 8px;
+  }
+  .rewards-icon {
+    font-size: 20px;
+  }
   .layout {
-    padding: 8px;
-    gap: 8px;
+    padding: 0 8px 16px;
+    gap: 10px;
   }
   .stage {
-    gap: 8px;
+    padding: 6px;
   }
   .game-canvas {
-    height: clamp(220px, 40vh, 340px);
+    height: clamp(230px, 40vh, 340px);
   }
-  .bet-panel {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-    padding: 12px;
+  .history {
+    top: 14px;
+    left: 14px;
+    right: 14px;
+  }
+  .side {
+    padding: 14px;
+    gap: 14px;
   }
   /* O botão principal vem PRIMEIRO no celular: é o que o polegar mais usa */
-  .action-btn {
+  .bet-panel .action-btn {
     order: -1;
   }
+  .bet-panel .card-title,
   .hint {
     display: none; /* não existe barra de espaço no celular */
+  }
+  .winners-row {
+    grid-template-columns: minmax(0, 1.6fr) 1fr 1fr;
+    padding: 9px 10px;
+  }
+  /* No celular a tabela fica com Jogador, Multiplicador e Ganho */
+  .col-time,
+  .winners-row > :nth-child(3) {
+    display: none;
   }
 }

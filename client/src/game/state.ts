@@ -1,5 +1,12 @@
 import { multiplierAt } from "../../../shared/crash-math.ts";
-import { HISTORY_SIZE, type PublicBet, type RoundPhase, type ServerMessage } from "../../../shared/protocol.ts";
+import {
+  HISTORY_SIZE,
+  WINNERS_SIZE,
+  type PublicBet,
+  type RoundPhase,
+  type ServerMessage,
+  type Winner,
+} from "../../../shared/protocol.ts";
 
 /** Tudo que o cliente sabe sobre o jogo, montado a partir das mensagens do servidor. */
 export interface GameState {
@@ -14,6 +21,10 @@ export interface GameState {
   crashPoint: number | null;
   history: number[];
   bets: PublicBet[];
+  /** Últimos cash-outs (de qualquer rodada), o mais novo primeiro. */
+  winners: Winner[];
+  /** Quantas pessoas estão com o jogo aberto agora. */
+  online: number;
 }
 
 export const initialGameState: GameState = {
@@ -25,6 +36,8 @@ export const initialGameState: GameState = {
   crashPoint: null,
   history: [],
   bets: [],
+  winners: [],
+  online: 0,
 };
 
 /**
@@ -58,6 +71,8 @@ export function gameReducer(state: GameState, { msg, receivedAt }: ServerAction)
         crashPoint: round.crashPoint,
         history: msg.history,
         bets: msg.bets,
+        winners: msg.winners,
+        online: msg.online,
       };
     }
     case "betting":
@@ -85,10 +100,15 @@ export function gameReducer(state: GameState, { msg, receivedAt }: ServerAction)
       };
     case "bet":
       return { ...state, bets: [...state.bets, msg.bet] };
-    case "cashout":
+    case "cashout": {
+      const { win } = msg;
       return {
         ...state,
-        bets: state.bets.map((bet) => (bet.playerId === msg.playerId ? { ...bet, cashedOutAt: msg.multiplier } : bet)),
+        bets: state.bets.map((bet) => (bet.playerId === win.playerId ? { ...bet, cashedOutAt: win.multiplier } : bet)),
+        winners: [win, ...state.winners].slice(0, WINNERS_SIZE),
       };
+    }
+    case "presence":
+      return { ...state, online: msg.online };
   }
 }

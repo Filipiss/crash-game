@@ -4,6 +4,8 @@ Protótipo jogável de um **crash game multiplayer em tempo real**, feito do zer
 
 Um multiplicador começa em 1.00x e sobe até "crashar" num ponto aleatório. Você aposta antes da decolagem e precisa fazer **cash out** antes do crash: ganha `aposta × multiplicador`. Todos os jogadores conectados veem a mesma rodada, as apostas e os cash-outs uns dos outros ao vivo.
 
+**Funcionalidades:** auto cash-out executado pelo servidor, aposta agendada para a próxima rodada, tabela de ganhadores ao vivo, contagem de jogadores online, recarga de fichas e atalho de teclado (Espaço).
+
 > Fichas de mentira, sem dinheiro real. É um projeto de estudo e portfólio.
 
 <p align="center"><img src="docs/screenshot-mobile.jpg" width="300" alt="Rocket Crash no celular: curva subindo, foguete e botão de cash out"></p>
@@ -77,6 +79,7 @@ npm start            # http://localhost:3001
 - **REST para ações, WebSocket para eventos.** As ações têm resposta, status HTTP e são fáceis de testar. O WebSocket é só servidor → cliente: um broadcast que serializa uma vez e envia para todos.
 - **Snapshot + deltas.** Quem conecta (ou reconecta) recebe o estado completo e, depois, só as mudanças. A reconexão usa *exponential backoff* com *jitter*.
 - **Tempos relativos na rede.** As mensagens trazem `elapsedMs` e `durationMs`, nunca horários absolutos, então o relógio errado de um celular não afeta o jogo.
+- **Auto cash-out no servidor.** O alvo fica guardado no servidor (não é público), e um `setTimeout` agendado em `msToReach(alvo)` paga exatamente o alvo, sem depender da latência da rede. Cash-out manual e automático passam pela mesma função `settle()`, então há um único caminho de pagamento.
 - **Dinheiro em centavos inteiros, sempre arredondado para baixo.** A tela usa a mesma regra de arredondamento do servidor, então nunca promete um valor maior do que o que será pago.
 - **Contrato compartilhado.** A pasta [`shared/`](shared) é importada pelos dois lados. Se um campo do protocolo mudar, o TypeScript acusa erro no cliente e no servidor ao mesmo tempo, e o `switch` do reducer é verificado como exaustivo.
 - **Ponte entre React e PixiJS.** O React cria e destrói a cena, e o Pixi anima sozinho. O init assíncrono do Pixi v8 é protegido contra a montagem dupla do StrictMode.
@@ -150,7 +153,7 @@ Registro de problemas reais encontrados testando, e como foram diagnosticados:
 
 - **Persistência:** jogadores e saldos ficam em memória e somem se o servidor reiniciar. O cliente detecta o `401` e cria uma conta nova. Próximo passo: um banco de dados (a interface `PlayerStore` não mudaria).
 - **Escala horizontal:** o jogo roda num único processo. Com várias instâncias, o loop precisaria de um único dono, com os eventos distribuídos por pub/sub (Redis, por exemplo).
-- **Latência joga contra o jogador:** o servidor é a autoridade, então um clique em 2.00x pode chegar ao servidor em 2.03x. Próximo passo: **auto cash-out**, um alvo definido antes da rodada e executado pelo próprio servidor.
+- **Latência no cash-out manual:** o servidor é a autoridade, então um clique em 2.00x pode chegar ao servidor em 2.03x. Para quem quer precisão, existe o **auto cash-out**, executado pelo próprio servidor no ponto exato.
 - **Provably fair:** publicar o hash do resultado antes da rodada para o jogador poder verificá-lo depois.
 - **Testes unitários:** o `gameReducer` e a matemática são funções puras, prontas para Vitest. Hoje a cobertura vem do smoke test de ponta a ponta e da simulação.
 - **Bundle:** dá para carregar o PixiJS sob demanda (`import()`) e exibir a UI antes do canvas.
@@ -174,5 +177,5 @@ client/src/
   game/state.ts            reducer: mensagens → estado
   net/                     cliente REST e WebSocket com reconexão
   hooks/                   useGameSocket, useSession, useToasts
-  components/              BetPanel, GameCanvas, HistoryBar, PlayersList…
+  components/              BetPanel, GameCanvas, LiveWinners, PlayersSummary, TopBar…
 ```

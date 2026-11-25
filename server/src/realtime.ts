@@ -22,10 +22,25 @@ export function attachRealtime(httpServer: Server, game: CrashGame): void {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
   const alive = new WeakMap<WebSocket, boolean>();
 
+  /** Broadcast: manda para todos os clientes conectados. */
+  function broadcast(msg: ServerMessage): void {
+    const data = JSON.stringify(msg); // serializa UMA vez, não uma por cliente
+    for (const ws of wss.clients) {
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      // Backpressure: se a conexão do cliente não está dando conta, pulamos ticks
+      // (o próximo tick corrige). Eventos importantes (crash, bet...) nunca são pulados.
+      if (msg.type === "tick" && ws.bufferedAmount > MAX_BUFFERED_BYTES) continue;
+      ws.send(data);
+    }
+  }
+
   wss.on("connection", (ws) => {
     alive.set(ws, true);
     ws.on("pong", () => alive.set(ws, true));
-    ws.on("close", () => console.log(`[ws] cliente saiu (${wss.clients.size} conectados)`));
+    ws.on("close", () => {
+      console.log(`[ws] cliente saiu (${wss.clients.size} conectados)`);
+      broadcast({ type: "presence", online: wss.clients.size });
+    });
     console.log(`[ws] cliente entrou (${wss.clients.size} conectados)`);
 
     // Padrão "snapshot + deltas": quem chega (ou reconecta) recebe o estado
@@ -35,20 +50,15 @@ export function attachRealtime(httpServer: Server, game: CrashGame): void {
       round: game.getSnapshot(),
       history: game.getHistory(),
       bets: game.getBets(),
+      winners: game.getWinners(),
+      online: wss.clients.size,
     });
+    // Os outros ficam sabendo que chegou mais alguém.
+    broadcast({ type: "presence", online: wss.clients.size });
   });
 
-  // Broadcast: todo evento do jogo vai para todos os clientes conectados.
-  game.onEvent((msg) => {
-    const data = JSON.stringify(msg); // serializa UMA vez, não uma por cliente
-    for (const ws of wss.clients) {
-      if (ws.readyState !== WebSocket.OPEN) continue;
-      // Backpressure: se a conexão do cliente não está dando conta, pulamos ticks
-      // (o próximo tick corrige). Eventos importantes (crash, bet...) nunca são pulados.
-      if (msg.type === "tick" && ws.bufferedAmount > MAX_BUFFERED_BYTES) continue;
-      ws.send(data);
-    }
-  });
+  // Todo evento do jogo vai para todos.
+  game.onEvent(broadcast);
 
   // Heartbeat: a cada 30s mandamos um "ping". Quem não respondeu "pong" desde
   // o último ping caiu sem avisar (wifi caiu, aba congelou): derrubamos a conexão.

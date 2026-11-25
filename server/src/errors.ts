@@ -18,6 +18,7 @@ export const STATUS_BY_CODE: Record<ErrorCode, number> = {
   UNAUTHORIZED: 401, // não sei quem você é
   INVALID_BODY: 400, // pedido mal formado
   INVALID_AMOUNT: 400,
+  INVALID_AUTO_CASHOUT: 400,
   INSUFFICIENT_FUNDS: 400,
   BETTING_CLOSED: 409, // 409 Conflict: o pedido é válido, mas conflita com o estado atual do jogo
   ALREADY_BET: 409,
