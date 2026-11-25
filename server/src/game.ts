@@ -87,12 +87,6 @@ export class CrashGame {
     return [...this.bets.values()].map(toPublic);
   }
 
-  /** O jogador ainda tem dinheiro "no foguete" (apostou e não saiu, rodada não acabou)? */
-  hasOpenBet(playerId: string): boolean {
-    const bet = this.bets.get(playerId);
-    return bet !== undefined && bet.cashedOutAt === null && this.phase !== "crashed";
-  }
-
   /** Registra uma aposta. Só é permitido durante a fase "betting". */
   placeBet(playerId: string, playerName: string, amountCents: number, autoCashoutAt: number | null): number {
     if (this.phase !== "betting") {

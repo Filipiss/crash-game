@@ -26,6 +26,9 @@ export const STATUS_BY_CODE: Record<ErrorCode, number> = {
   ROUND_NOT_RUNNING: 409,
   ALREADY_CASHED_OUT: 409,
   TOO_LATE: 409,
-  REFILL_NOT_ALLOWED: 409,
+  INVALID_DEPOSIT: 400,
+  INVALID_PAYMENT_METHOD: 400,
+  INVALID_PROMO: 404, // 404: esse código promocional "não existe"
+  BONUS_COOLDOWN: 429, // 429 Too Many Requests: "calma, tente de novo mais tarde"
   INTERNAL: 500,
 };

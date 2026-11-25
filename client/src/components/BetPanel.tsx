@@ -68,7 +68,7 @@ export function BetPanel(props: Props) {
   const disabled = !action.onClick || pending || !connected;
 
   function betAction(nextRound: boolean): MainAction {
-    if (balance < MIN_BET_CENTS) return { label: "Recarregar fichas", sub: "seu saldo acabou", kind: "refill", onClick: props.onRefill };
+    if (balance < MIN_BET_CENTS) return { label: "Recarregar fichas", sub: "seu saldo acabou · toque para recarregar", kind: "refill", onClick: props.onRefill };
     return {
       label: nextRound ? "Apostar (próxima rodada)" : "Apostar",
       sub: amountError ?? autoError ?? `${formatCents(amountCents ?? 0)}${autoLabel(intent?.autoCashoutAt ?? null)}`,
@@ -122,6 +122,8 @@ export function BetPanel(props: Props) {
       if (event.code !== "Space" || event.repeat) return;
       // Num campo de texto o espaço é digitação; num botão focado o navegador já "clica".
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement) return;
+      // Com um modal aberto (ex.: recarga), o Espaço não pode disparar uma aposta escondida atrás dele.
+      if (document.querySelector('[role="dialog"]')) return;
       event.preventDefault(); // não rolar a página
       actionRef.current?.();
     }

@@ -1,19 +1,27 @@
 import { Router, type ErrorRequestHandler, type Request } from "express";
 import {
+  FREE_BONUS_CENTS,
   MAX_AUTO_CASHOUT,
   MAX_BET_CENTS,
+  MAX_DEPOSIT_CENTS,
   MIN_AUTO_CASHOUT,
   MIN_BET_CENTS,
+  MIN_DEPOSIT_CENTS,
+  PAYMENT_METHODS,
   type ApiErrorBody,
   type BetResponse,
+  type BonusResponse,
   type CashoutResponse,
   type CreatePlayerResponse,
+  type DepositRequest,
+  type DepositResponse,
   type HistoryResponse,
+  type PromoResponse,
 } from "../../shared/api.ts";
 import type { RoundSnapshot } from "../../shared/protocol.ts";
 import { AppError, STATUS_BY_CODE } from "./errors.ts";
 import type { CrashGame } from "./game.ts";
-import { toPlayerDTO, type Player, type PlayerStore } from "./players.ts";
+import { promoBonusPercent, toPlayerDTO, type Player, type PlayerStore } from "./players.ts";
 
 /**
  * Camada HTTP: traduz pedidos em chamadas ao jogo/carteira e respostas em JSON.
@@ -70,14 +78,45 @@ export function createApiRouter(game: CrashGame, players: PlayerStore): Router {
     res.json(toPlayerDTO(requirePlayer(req)));
   });
 
-  router.post("/players/me/refill", (req, res) => {
+  // Fichas grátis (o intervalo entre resgates é controlado pelo servidor).
+  router.post("/players/me/bonus", (req, res) => {
     const player = requirePlayer(req);
-    // Sem essa checagem dava para apostar tudo, recarregar durante o voo e ainda ganhar a aposta.
-    if (player.balanceCents >= MIN_BET_CENTS || game.hasOpenBet(player.id)) {
-      throw new AppError("REFILL_NOT_ALLOWED", "Só dá para recarregar quando o saldo acabar e não houver aposta em jogo.");
+    players.claimBonus(player);
+    const body: BonusResponse = { player: toPlayerDTO(player), bonusCents: FREE_BONUS_CENTS };
+    res.json(body);
+  });
+
+  // Valida um código promocional ANTES de pagar (o botão "Ativar" do modal).
+  router.get("/promo/:code", (req, res) => {
+    const bonusPercent = promoBonusPercent(req.params.code);
+    if (bonusPercent === null) throw new AppError("INVALID_PROMO", "Código promocional inválido.");
+    const body: PromoResponse = { code: req.params.code.toUpperCase(), bonusPercent };
+    res.json(body);
+  });
+
+  // Recarga SIMULADA de fichas virtuais. Nenhum dado de pagamento é recebido.
+  router.post("/players/me/deposit", (req, res) => {
+    const player = requirePlayer(req);
+    const { amountCents, method, promoCode } = (req.body ?? {}) as Partial<Record<keyof DepositRequest, unknown>>;
+
+    if (typeof amountCents !== "number" || !Number.isInteger(amountCents) || amountCents < MIN_DEPOSIT_CENTS || amountCents > MAX_DEPOSIT_CENTS) {
+      throw new AppError("INVALID_DEPOSIT", `A recarga deve ficar entre ${MIN_DEPOSIT_CENTS} e ${MAX_DEPOSIT_CENTS} centavos.`);
     }
-    players.refill(player);
-    res.json(toPlayerDTO(player));
+    if (typeof method !== "string" || !(PAYMENT_METHODS as readonly string[]).includes(method)) {
+      throw new AppError("INVALID_PAYMENT_METHOD", "Forma de pagamento inválida.");
+    }
+    // O bônus do código é recalculado AQUI: o cliente não manda "quanto de bônus quer".
+    let bonusPercent = 0;
+    if (typeof promoCode === "string" && promoCode.trim() !== "") {
+      const percent = promoBonusPercent(promoCode);
+      if (percent === null) throw new AppError("INVALID_PROMO", "Código promocional inválido.");
+      bonusPercent = percent;
+    }
+    const bonusCents = Math.floor((amountCents * bonusPercent) / 100);
+    players.deposit(player, amountCents + bonusCents);
+
+    const body: DepositResponse = { player: toPlayerDTO(player), depositedCents: amountCents, bonusCents };
+    res.status(201).json(body);
   });
 
   router.get("/round", (_req, res) => {

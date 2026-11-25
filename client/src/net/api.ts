@@ -2,10 +2,14 @@ import type {
   ApiErrorBody,
   BetRequest,
   BetResponse,
+  BonusResponse,
   CashoutResponse,
   CreatePlayerResponse,
+  DepositRequest,
+  DepositResponse,
   ErrorCode,
   PlayerDTO,
+  PromoResponse,
 } from "../../../shared/api.ts";
 
 /** Erro da API com o `code` do servidor (ou NETWORK, quando nem chegou lá). */
@@ -49,7 +53,10 @@ async function request<T>(method: "GET" | "POST", path: string, options: { token
 export const api = {
   createPlayer: () => request<CreatePlayerResponse>("POST", "/players"),
   me: (token: string) => request<PlayerDTO>("GET", "/players/me", { token }),
-  refill: (token: string) => request<PlayerDTO>("POST", "/players/me/refill", { token }),
+  claimBonus: (token: string) => request<BonusResponse>("POST", "/players/me/bonus", { token }),
+  checkPromo: (code: string) => request<PromoResponse>("GET", `/promo/${encodeURIComponent(code)}`),
+  /** Recarga SIMULADA: o servidor só credita fichas virtuais. */
+  deposit: (token: string, body: DepositRequest) => request<DepositResponse>("POST", "/players/me/deposit", { token, body }),
   bet: (token: string, amountCents: number, autoCashoutAt: number | null) =>
     request<BetResponse>("POST", "/bet", { token, body: { amountCents, autoCashoutAt } satisfies BetRequest }),
   cashout: (token: string) => request<CashoutResponse>("POST", "/cashout", { token }),

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MIN_BET_CENTS } from "../../shared/api.ts";
+import type { DepositRequest } from "../../shared/api.ts";
 import { BetPanel, type BetIntent } from "./components/BetPanel.tsx";
+import { DepositModal } from "./components/DepositModal.tsx";
 import { GameCanvas } from "./components/GameCanvas.tsx";
 import { HistoryBar } from "./components/HistoryBar.tsx";
 import { LiveWinners } from "./components/LiveWinners.tsx";
@@ -36,8 +37,9 @@ export function App() {
   const myBet = game.bets.find((bet) => bet.playerId === myId) ?? null;
   const myAutoTarget = myAuto?.roundId === game.roundId ? myAuto.target : null;
   const balance = session?.player.balanceCents ?? null;
-  const hasOpenBet = myBet !== null && myBet.cashedOutAt === null && game.phase !== "crashed";
-  const canRefill = balance !== null && balance < MIN_BET_CENTS && !hasOpenBet && !queued;
+  const [depositOpen, setDepositOpen] = useState(false);
+  const openDeposit = useCallback(() => setDepositOpen(true), []);
+  const closeDeposit = useCallback(() => setDepositOpen(false), []);
 
   // Reconectou depois de cair (ex.: servidor reiniciou)? Revalida a sessão e o saldo.
   const prevStatus = useRef(status);
@@ -127,17 +129,31 @@ export function App() {
     push("win", `🚀 Saiu em ${formatMultiplier(res.multiplier)}! +${formatCents(res.payoutCents)}`);
   };
 
-  const refill = async () => {
-    const player = await run((token) => api.refill(token));
-    if (player) {
-      replacePlayer(player);
-      push("info", `🎁 Fichas recarregadas: ${formatCents(player.balanceCents)}`);
-    }
+  const claimBonus = async () => {
+    const res = await run((token) => api.claimBonus(token));
+    if (!res) return;
+    replacePlayer(res.player); // saldo novo + quando o próximo resgate libera
+    push("win", `🎁 Fichas grátis resgatadas: +${formatCents(res.bonusCents)}`);
   };
+
+  const deposit = useCallback(
+    async (request: DepositRequest) => {
+      const res = await run((token) => api.deposit(token, request));
+      if (res) replacePlayer(res.player);
+      return res;
+    },
+    [run, replacePlayer],
+  );
 
   return (
     <div className="app">
-      <TopBar player={session?.player ?? null} status={status} canRefill={canRefill} onRefill={refill} />
+      <TopBar
+        player={session?.player ?? null}
+        bonusReadyAt={session?.bonusReadyAt ?? null}
+        status={status}
+        onClaimBonus={claimBonus}
+        onOpenDeposit={openDeposit}
+      />
 
       <main className="layout">
         <aside className="side card">
@@ -152,7 +168,7 @@ export function App() {
             onBet={placeBet}
             onCancelQueued={() => setQueued(null)}
             onCashout={cashOut}
-            onRefill={refill}
+            onRefill={openDeposit}
           />
           <PlayersSummary bets={game.bets} online={game.online} />
           {sessionError && <p className="session-error">Não foi possível criar sua conta: {sessionError}</p>}
@@ -167,6 +183,7 @@ export function App() {
         <LiveWinners winners={game.winners} myId={myId} />
       </main>
 
+      {depositOpen && <DepositModal onClose={closeDeposit} onDeposit={deposit} />}
       <Toasts toasts={toasts} />
     </div>
   );

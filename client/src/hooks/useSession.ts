@@ -7,6 +7,13 @@ const TOKEN_KEY = "rocket-crash:token";
 export interface Session {
   token: string;
   player: PlayerDTO;
+  /** Instante (relógio LOCAL, performance.now) em que as fichas grátis liberam. */
+  bonusReadyAt: number;
+}
+
+/** O servidor diz "faltam X ms"; convertemos para o relógio local no momento em que chegou. */
+function withBonusClock(token: string, player: PlayerDTO): Session {
+  return { token, player, bonusReadyAt: performance.now() + player.nextBonusInMs };
 }
 
 /** Usa o token salvo se ele ainda vale; senão (ex.: servidor reiniciou) cria um jogador novo. */
@@ -14,14 +21,14 @@ async function loadOrCreate(): Promise<Session> {
   const saved = localStorage.getItem(TOKEN_KEY);
   if (saved) {
     try {
-      return { token: saved, player: await api.me(saved) };
+      return withBonusClock(saved, await api.me(saved));
     } catch (err) {
       if (!(err instanceof ApiError && err.code === "UNAUTHORIZED")) throw err;
     }
   }
   const created = await api.createPlayer();
   localStorage.setItem(TOKEN_KEY, created.token);
-  return created;
+  return withBonusClock(created.token, created.player);
 }
 
 // Uma única promessa compartilhada enquanto o pedido está em andamento.
@@ -59,8 +66,9 @@ export function useSession() {
     setSession((s) => s && { ...s, player: { ...s.player, balanceCents } });
   }, []);
 
+  /** Respostas de bônus/recarga trazem o jogador inteiro (saldo + tempo do próximo bônus). */
   const replacePlayer = useCallback((player: PlayerDTO) => {
-    setSession((s) => s && { ...s, player });
+    setSession((s) => s && withBonusClock(s.token, player));
   }, []);
 
   return { session, error, refresh, setBalance, replacePlayer };

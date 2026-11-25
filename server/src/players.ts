@@ -1,14 +1,34 @@
 import { randomInt, randomUUID } from "node:crypto";
-import type { PlayerDTO } from "../../shared/api.ts";
+import { FREE_BONUS_CENTS, FREE_BONUS_COOLDOWN_MS, type PlayerDTO } from "../../shared/api.ts";
 import { AppError } from "./errors.ts";
 
 const STARTING_BALANCE_CENTS = 1_000_00; // R$ 1.000,00 de fichas de mentira
+
+/**
+ * Códigos promocionais -> % de bônus na recarga. Ficam SÓ no servidor:
+ * se estivessem no cliente, qualquer um veria a lista no DevTools.
+ */
+const PROMO_CODES: Record<string, number> = {
+  ROCKET: 10,
+  SELVA: 20,
+};
 
 export interface Player {
   id: string; // público: pode aparecer para outros jogadores
   token: string; // secreto: prova que "eu sou este jogador"
   name: string;
   balanceCents: number;
+  /** Quando resgatou as fichas grátis pela última vez (0 = nunca). */
+  lastBonusAt: number;
+}
+
+/** % de bônus de um código promocional, ou null se ele não existe. Não diferencia maiúsculas. */
+export function promoBonusPercent(code: string): number | null {
+  return PROMO_CODES[code.trim().toUpperCase()] ?? null;
+}
+
+function bonusWaitMs(player: Player): number {
+  return Math.max(0, player.lastBonusAt + FREE_BONUS_COOLDOWN_MS - Date.now());
 }
 
 // Apelidos dos jogadores convidados: celebridades (só nomes de exibição, fichas de mentira).
@@ -57,6 +77,7 @@ export class PlayerStore {
       token: randomUUID(),
       name: pickName(new Set([...this.byToken.values()].map((p) => p.name))),
       balanceCents: STARTING_BALANCE_CENTS,
+      lastBonusAt: 0,
     };
     this.byToken.set(player.token, player);
     this.byId.set(player.id, player);
@@ -80,13 +101,27 @@ export class PlayerStore {
     if (player) player.balanceCents += cents;
   }
 
-  /** Fichas de volta para quem zerou (é um protótipo, não um cassino de verdade). */
-  refill(player: Player): void {
-    player.balanceCents = STARTING_BALANCE_CENTS;
+  /** Recarga SIMULADA: só soma fichas virtuais (o valor já foi validado na rota). */
+  deposit(player: Player, cents: number): void {
+    player.balanceCents += cents;
+  }
+
+  /** Fichas grátis, com intervalo mínimo entre resgates controlado AQUI (não no cliente). */
+  claimBonus(player: Player): void {
+    const waitMs = bonusWaitMs(player);
+    if (waitMs > 0) {
+      // Arredonda o TOTAL de segundos antes de dividir (senão saía "4min 60s")
+      const totalSeconds = Math.ceil(waitMs / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      throw new AppError("BONUS_COOLDOWN", `Fichas grátis disponíveis de novo em ${minutes}min ${seconds}s.`);
+    }
+    player.balanceCents += FREE_BONUS_CENTS;
+    player.lastBonusAt = Date.now();
   }
 }
 
 /** Converte para o formato público: o token NUNCA sai daqui por engano. */
 export function toPlayerDTO(player: Player): PlayerDTO {
-  return { id: player.id, name: player.name, balanceCents: player.balanceCents };
+  return { id: player.id, name: player.name, balanceCents: player.balanceCents, nextBonusInMs: bonusWaitMs(player) };
 }

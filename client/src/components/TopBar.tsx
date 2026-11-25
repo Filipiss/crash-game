@@ -1,5 +1,6 @@
-import type { PlayerDTO } from "../../../shared/api.ts";
-import { formatCents } from "../format.ts";
+import { FREE_BONUS_CENTS, type PlayerDTO } from "../../../shared/api.ts";
+import { formatCents, formatCountdown } from "../format.ts";
+import { useNow } from "../hooks/useNow.ts";
 import type { ConnectionStatus } from "../net/GameSocket.ts";
 import { Avatar } from "./Avatar.tsx";
 
@@ -11,12 +12,37 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
 
 interface Props {
   player: PlayerDTO | null;
+  bonusReadyAt: number | null;
   status: ConnectionStatus;
-  canRefill: boolean;
-  onRefill: () => void;
+  onClaimBonus: () => void;
+  onOpenDeposit: () => void;
 }
 
-export function TopBar({ player, status, canRefill, onRefill }: Props) {
+/**
+ * Card de fichas grátis com contagem regressiva. É um componente separado de
+ * propósito: o useNow re-renderiza A CADA SEGUNDO, e assim só este pedacinho
+ * da tela é refeito, não o topo inteiro (nem o app).
+ */
+function RewardsCard({ bonusReadyAt, onClaim }: { bonusReadyAt: number | null; onClaim: () => void }) {
+  const now = useNow(1000, bonusReadyAt !== null);
+  const msLeft = bonusReadyAt === null ? Infinity : bonusReadyAt - now;
+  const ready = msLeft <= 0;
+
+  return (
+    <button type="button" className={`rewards ${ready ? "ready" : ""}`} onClick={onClaim} disabled={!ready}>
+      <span className="rewards-icon" aria-hidden>
+        🎁
+      </span>
+      <span className="rewards-text">
+        <strong>Fichas grátis</strong>
+        <small>{ready ? `Resgatar ${formatCents(FREE_BONUS_CENTS)}` : bonusReadyAt === null ? "…" : `Volta em ${formatCountdown(msLeft)}`}</small>
+      </span>
+      {ready && <span className="rewards-badge" aria-hidden />}
+    </button>
+  );
+}
+
+export function TopBar({ player, bonusReadyAt, status, onClaimBonus, onOpenDeposit }: Props) {
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -28,17 +54,7 @@ export function TopBar({ player, status, canRefill, onRefill }: Props) {
             Rocket <strong>Crash</strong>
           </span>
         </div>
-
-        {/* Card de "recompensa": recarga grátis de fichas quando o saldo acaba */}
-        <button type="button" className="rewards" onClick={onRefill} disabled={!canRefill}>
-          <span className="rewards-icon" aria-hidden>
-            🎁
-          </span>
-          <span className="rewards-text">
-            <strong>Fichas grátis</strong>
-            <small>{canRefill ? "Toque para recarregar!" : "Quando o saldo acabar"}</small>
-          </span>
-        </button>
+        <RewardsCard bonusReadyAt={bonusReadyAt} onClaim={onClaimBonus} />
       </div>
 
       <div className="topbar-right">
@@ -51,14 +67,7 @@ export function TopBar({ player, status, canRefill, onRefill }: Props) {
           <>
             <div className="balance-pill">
               <span className="balance-value">{formatCents(player.balanceCents)}</span>
-              <button
-                type="button"
-                className="balance-add"
-                onClick={onRefill}
-                disabled={!canRefill}
-                title={canRefill ? "Recarregar fichas" : "Disponível quando o saldo acabar"}
-                aria-label="Recarregar fichas"
-              >
+              <button type="button" className="balance-add" onClick={onOpenDeposit} title="Recarregar fichas" aria-label="Recarregar fichas">
                 +
               </button>
             </div>

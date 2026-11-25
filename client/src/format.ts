@@ -10,6 +10,12 @@ export function formatMultiplier(multiplier: number): string {
   return `${multiplier.toFixed(2)}x`;
 }
 
+/** 272_000 ms -> "4:32" */
+export function formatCountdown(ms: number): string {
+  const total = Math.ceil(Math.max(0, ms) / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
 /** epoch ms -> "14:32:05" no fuso do jogador */
 export function formatTime(epochMs: number): string {
   return new Date(epochMs).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });

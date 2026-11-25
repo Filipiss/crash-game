@@ -1,6 +1,16 @@
 // Teste de fumaça da REST API: joga uma rodada inteira de verdade contra o servidor rodando.
 // Rodar (com `npm run dev` ligado em outro terminal): npm run smoke -w server
-import type { ApiErrorBody, BetResponse, CashoutResponse, CreatePlayerResponse, HistoryResponse, PlayerDTO } from "../../shared/api.ts";
+import type {
+  ApiErrorBody,
+  BetResponse,
+  BonusResponse,
+  CashoutResponse,
+  CreatePlayerResponse,
+  DepositResponse,
+  HistoryResponse,
+  PlayerDTO,
+  PromoResponse,
+} from "../../shared/api.ts";
 import { msToReach } from "../../shared/crash-math.ts";
 import type { RoundSnapshot } from "../../shared/protocol.ts";
 
@@ -54,6 +64,23 @@ console.log(`✓ jogador criado: ${player.name}, saldo ${player.balanceCents} ce
 
 await expectError("sem token", "UNAUTHORIZED", () => api("POST", "/bet", undefined, { amountCents: 1000 }));
 await expectError("valor quebrado", "INVALID_AMOUNT", () => api("POST", "/bet", token, { amountCents: 10.5 }));
+
+// Carteira virtual: fichas grátis, código promocional e recarga SIMULADA
+const bonus = await api<BonusResponse>("POST", "/players/me/bonus", token);
+console.log(`✓ fichas grátis: +${bonus.bonusCents}, saldo ${bonus.player.balanceCents}, próximo resgate em ${Math.round(bonus.player.nextBonusInMs / 1000)}s`);
+await expectError("resgatar 2x seguidas", "BONUS_COOLDOWN", () => api("POST", "/players/me/bonus", token));
+await expectError("código inexistente", "INVALID_PROMO", () => api("GET", "/promo/NAOEXISTE"));
+const promo = await api<PromoResponse>("GET", "/promo/rocket");
+const deposit = await api<DepositResponse>("POST", "/players/me/deposit", token, { amountCents: 3000, method: "pix", promoCode: "rocket" });
+const depositOk = deposit.bonusCents === Math.floor((3000 * promo.bonusPercent) / 100);
+if (!depositOk) process.exitCode = 1;
+console.log(`${depositOk ? "✓" : "✗"} recarga de 3000 com ${promo.code} (+${promo.bonusPercent}%): bônus ${deposit.bonusCents}, saldo ${deposit.player.balanceCents}`);
+await expectError("pagar com skins", "INVALID_PAYMENT_METHOD", () =>
+  api("POST", "/players/me/deposit", token, { amountCents: 3000, method: "skins" }),
+);
+await expectError("recarga abaixo do mínimo", "INVALID_DEPOSIT", () =>
+  api("POST", "/players/me/deposit", token, { amountCents: 50, method: "pix" }),
+);
 
 const round = await waitFor((r) => r.phase === "betting" && r.bettingMsLeft > 1000);
 console.log(`✓ rodada ${round.roundId} aceitando apostas (${round.bettingMsLeft}ms restantes)`);
