@@ -1,0 +1,479 @@
+/* ------------------------------------------------------------ tokens */
+:root {
+  --bg: #070b16;
+  --panel: #0f1629;
+  --panel-2: #141d35;
+  --border: #1c2540;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --cyan: #22d3ee;
+  --green: #22c55e;
+  --green-soft: #4ade80;
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --gold: #fbbf24;
+  --radius: 14px;
+
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  /* Celulares com "notch": não deixa o conteúdo ficar embaixo das bordas */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  /* Toque: sem atraso de 300ms nem zoom no duplo toque, sem flash azul */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------ layout */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+/* ------------------------------------------------------------ topbar */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(15, 22, 41, 0.8);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+}
+.brand {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.wallet {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+.wallet-name {
+  font-size: 12px;
+  color: var(--muted);
+}
+.wallet-balance {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums; /* números com largura fixa: o saldo não "dança" */
+}
+.conn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--orange);
+}
+.conn-open .dot {
+  background: var(--green-soft);
+  box-shadow: 0 0 8px var(--green-soft);
+}
+
+/* ------------------------------------------------------------ histórico */
+.history {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto; /* no celular rola para o lado em vez de quebrar linha */
+  scrollbar-width: none;
+  min-height: 28px;
+}
+.history-empty {
+  color: var(--muted);
+  font-size: 13px;
+}
+.pill {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--panel-2);
+}
+.pill-low {
+  color: #94a3b8;
+}
+.pill-mid {
+  color: var(--green-soft);
+}
+.pill-high {
+  color: var(--gold);
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.4);
+}
+
+/* ------------------------------------------------------------ canvas */
+.canvas-wrap {
+  position: relative;
+}
+.game-canvas {
+  width: 100%;
+  height: clamp(260px, 52vh, 480px);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #0b1020;
+  border: 1px solid var(--border);
+}
+.canvas-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: rgba(7, 11, 22, 0.7);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------ painel de aposta */
+.bet-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+.amount {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.amount-field {
+  display: block;
+}
+.amount-field > span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.amount-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px 4px 4px 12px;
+}
+.amount-input:has(input[aria-invalid="true"]) {
+  border-color: var(--red);
+}
+.currency {
+  color: var(--muted);
+}
+.amount-input input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  /* 16px é o mínimo: abaixo disso o iPhone dá zoom na página ao focar o campo */
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.amount-input button,
+.quick button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 40px;
+  min-height: 36px;
+  font-weight: 700;
+}
+.quick {
+  display: grid;
+  /* minmax(0, 1fr) e não 1fr: "1fr" sozinho tem mínimo = conteúdo e transborda em tela estreita */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.quick button {
+  font-size: 13px;
+}
+.amount-input button:disabled,
+.quick button:disabled {
+  opacity: 0.4;
+}
+
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 72px; /* alvo de toque grande: é o botão mais importante do jogo */
+  border: 0;
+  border-radius: 12px;
+  font-weight: 800;
+  transition:
+    transform 80ms ease,
+    filter 120ms ease;
+}
+.action-btn:not(:disabled):active {
+  transform: scale(0.97);
+}
+.action-btn:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+.action-label {
+  font-size: 20px;
+}
+.action-sub {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+.action-bet {
+  background: var(--green);
+  color: #052e16;
+}
+.action-refill {
+  background: var(--cyan);
+  color: #083344;
+}
+.action-cashout {
+  background: var(--orange);
+  color: #451a03;
+  animation: pulse 0.9s ease-in-out infinite;
+}
+.action-waiting {
+  background: var(--panel-2);
+  color: var(--muted);
+}
+.action-won {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--green-soft);
+  box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.4);
+}
+.action-bet:disabled {
+  opacity: 0.5;
+}
+@keyframes pulse {
+  50% {
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.25);
+  }
+}
+/* Quem pede menos movimento no sistema operacional não recebe animações */
+@media (prefers-reduced-motion: reduce) {
+  .action-cashout {
+    animation: none;
+  }
+}
+.hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+kbd {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+.session-error {
+  color: var(--red);
+  margin: 0;
+}
+
+/* ------------------------------------------------------------ jogadores */
+.players h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.players-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.players ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.player {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 13px;
+}
+.player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.player-name em {
+  color: var(--cyan);
+  font-style: normal;
+}
+.player-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.player-result {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.player.me {
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.4);
+}
+.player.won .player-result {
+  color: var(--green-soft);
+}
+.player.lost .player-result {
+  color: var(--red);
+}
+.players-empty {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------ toasts */
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 24px));
+  z-index: 20;
+  pointer-events: none;
+}
+.toast {
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: toast-in 180ms ease-out;
+}
+.toast-win {
+  border-color: var(--green-soft);
+  color: var(--green-soft);
+}
+.toast-loss,
+.toast-error {
+  border-color: var(--red);
+  color: #fca5a5;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* ------------------------------------------------------------ responsivo */
+/* Tablet / celular deitado: a lista de jogadores desce para baixo do jogo */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+    gap: 12px;
+  }
+}
+
+/* Celular em pé: tudo empilhado, canvas mais baixo para o botão caber na tela */
+@media (max-width: 600px) {
+  .topbar {
+    padding: 10px 12px;
+  }
+  .conn-label {
+    display: none;
+  }
+  .layout {
+    padding: 8px;
+    gap: 8px;
+  }
+  .stage {
+    gap: 8px;
+  }
+  .game-canvas {
+    height: clamp(220px, 40vh, 340px);
+  }
+  .bet-panel {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+  /* O botão principal vem PRIMEIRO no celular: é o que o polegar mais usa */
+  .action-btn {
+    order: -1;
+  }
+  .hint {
+    display: none; /* não existe barra de espaço no celular */
+  }
+}
