@@ -2,6 +2,10 @@
 
 Protótipo jogável de um **crash game multiplayer em tempo real**, feito do zero com **React, TypeScript, PixiJS, REST e WebSocket**.
 
+### 🎮 [Jogar agora: rocket-crash-dgfb.onrender.com](https://rocket-crash-dgfb.onrender.com)
+
+> Hospedado no plano grátis do Render: se ninguém acessou nos últimos ~15 min, a primeira abertura leva uns 50 segundos para o servidor acordar.
+
 Um multiplicador começa em 1.00x e sobe até "crashar" num ponto aleatório. Você aposta antes da decolagem e precisa fazer **cash out** antes do crash: ganha `aposta × multiplicador`. Todos os jogadores conectados veem a mesma rodada, as apostas e os cash-outs uns dos outros ao vivo.
 
 **Funcionalidades:** auto cash-out executado pelo servidor, aposta agendada para a próxima rodada, tabela de ganhadores ao vivo, contagem de jogadores online, fichas grátis com tempo de espera, recarga **simulada** com pacotes e código promocional (`ROCKET` dá +10%), página de perfil com estatísticas e atalho de teclado (Espaço).
