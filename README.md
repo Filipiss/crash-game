@@ -4,7 +4,9 @@ Protótipo jogável de um **crash game multiplayer em tempo real**, feito do zer
 
 Um multiplicador começa em 1.00x e sobe até "crashar" num ponto aleatório. Você aposta antes da decolagem e precisa fazer **cash out** antes do crash: ganha `aposta × multiplicador`. Todos os jogadores conectados veem a mesma rodada, as apostas e os cash-outs uns dos outros ao vivo.
 
-**Funcionalidades:** auto cash-out executado pelo servidor, aposta agendada para a próxima rodada, tabela de ganhadores ao vivo, contagem de jogadores online, fichas grátis com tempo de espera, recarga **simulada** com pacotes e código promocional (`ROCKET` dá +10%) e atalho de teclado (Espaço).
+**Funcionalidades:** auto cash-out executado pelo servidor, aposta agendada para a próxima rodada, tabela de ganhadores ao vivo, contagem de jogadores online, fichas grátis com tempo de espera, recarga **simulada** com pacotes e código promocional (`ROCKET` dá +10%), página de perfil com estatísticas e atalho de teclado (Espaço).
+
+> **Jogadores simulados:** para a sala parecer movimentada na demo, o servidor tem bots ([`bots.ts`](server/src/bots.ts)) que apostam a cada rodada. Eles não têm atalho: usam o mesmo `game.placeBet()` e o auto cash-out de um jogador real. Os dados pessoais do perfil também são fictícios (e-mails em `@example.com`).
 
 > A recarga é só uma simulação de interface: nenhum dado de pagamento é pedido, e o servidor apenas credita fichas virtuais. Mesmo assim, ele valida o valor, a forma de pagamento e o código, e calcula o bônus sozinho. O cliente nunca diz "quanto de bônus quer".
 
@@ -52,6 +54,34 @@ npm start            # http://localhost:3001
 | Eventos em tempo real via **WebSockets** | [`realtime.ts`](server/src/realtime.ts) (broadcast, heartbeat, backpressure) e [`GameSocket.ts`](client/src/net/GameSocket.ts) (reconexão com backoff) |
 | Fluidez e adaptação entre telas | Layout responsivo testado em 375px e 1280px, controles pensados para toque, resolução do canvas limitada a 2x |
 | Profiling e debugging com evidências | Overlay `?debug`, números medidos abaixo e a seção [bugs encontrados](#bugs-encontrados-no-caminho) |
+
+## Rotas
+
+**Páginas** (React Router, no cliente):
+
+| Rota | Página |
+|---|---|
+| `/` | Mesa do jogo |
+| `/perfil` | Perfil do jogador: dados (fictícios, editáveis) e estatísticas reais |
+| `*` | Página 404 "Perdido no espaço" |
+
+O WebSocket, a sessão e as notificações ficam no `App`, acima das rotas, então trocar de página não derruba a conexão. Em produção, o Express devolve o `index.html` para qualquer `GET` fora de `/api` (fallback de SPA), e assim `/perfil` também funciona aberto direto pela URL.
+
+**API REST** (Express, sob `/api`):
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/players` | Cria um jogador convidado e devolve o token |
+| `GET` | `/players/me` | Nome, saldo e tempo até as próximas fichas grátis |
+| `GET` / `PUT` | `/players/me/profile` | Lê / atualiza o perfil (validação compartilhada em `shared/profile.ts`) |
+| `POST` | `/players/me/bonus` | Resgata fichas grátis (`429` se ainda estiver no tempo de espera) |
+| `POST` | `/players/me/deposit` | Recarga **simulada** de fichas virtuais |
+| `GET` | `/promo/:code` | Valida um código promocional |
+| `POST` | `/bet` | Aposta (com auto cash-out opcional) |
+| `POST` | `/cashout` | Sai da rodada no multiplicador atual |
+| `GET` | `/round`, `/history` | Estado da rodada e últimos crashes |
+
+Rotas inexistentes em `/api` devolvem `404` em JSON, no mesmo formato de erro do resto da API.
 
 ## Arquitetura
 
@@ -105,7 +135,7 @@ Medido com o build de produção (`npm run build && npm start`) no Chrome deskto
 
 | Métrica | Valor |
 |---|---|
-| JS principal (React + PixiJS + jogo) | 552 KB → **166 KB com gzip** (o middleware `compression` reduziu a transferência em 70%) |
+| JS principal (React + React Router + PixiJS + jogo) | 613 KB → **189 KB com gzip** (o middleware `compression` reduz a transferência em ~70%). A primeira medição, antes do React Router e das telas novas, era 552 → 166 KB. |
 | Transferido no primeiro acesso (HTML + CSS + JS) | ~247 KB |
 | First Contentful Paint (localhost) | ~390 ms |
 | Cache | Arquivos com hash em `/assets` usam `immutable, max-age=1y`. O `index.html` não tem cache longo. |
@@ -179,5 +209,6 @@ client/src/
   game/state.ts            reducer: mensagens → estado
   net/                     cliente REST e WebSocket com reconexão
   hooks/                   useGameSocket, useSession, useToasts
-  components/              BetPanel, GameCanvas, LiveWinners, PlayersSummary, TopBar…
+  pages/                   GamePage (/), ProfilePage (/perfil), NotFoundPage (*)
+  components/              BetPanel, GameCanvas, LiveWinners, PlayersSummary, TopBar, DepositModal…
 ```

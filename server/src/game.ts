@@ -17,7 +17,7 @@ const TICK_MS = 100; // 10 atualizações por segundo pela rede
 
 type Listener = (msg: ServerMessage) => void;
 /** Quem paga o prêmio (a carteira). O jogo decide QUANTO; a carteira só credita. */
-type PayoutFn = (playerId: string, payoutCents: number) => void;
+type PayoutFn = (playerId: string, payoutCents: number, multiplier: number) => void;
 
 /** A aposta como o SERVIDOR a guarda: o alvo de auto cash-out não é público. */
 interface Bet extends PublicBet {
@@ -134,7 +134,7 @@ export class CrashGame {
     bet.cashedOutAt = multiplier;
     // Centavos inteiros, arredondando para baixo (a favor da casa, nunca do bug).
     const payoutCents = Math.floor(bet.amountCents * multiplier);
-    this.payout(bet.playerId, payoutCents);
+    this.payout(bet.playerId, payoutCents, multiplier);
 
     const win: Winner = {
       roundId: this.roundId,

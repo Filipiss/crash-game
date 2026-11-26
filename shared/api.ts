@@ -104,6 +104,8 @@ export type ErrorCode =
   | "INVALID_PAYMENT_METHOD"
   | "INVALID_PROMO"
   | "BONUS_COOLDOWN"
+  | "INVALID_PROFILE"
+  | "NOT_FOUND"
   | "INTERNAL";
 
 export interface ApiErrorBody {

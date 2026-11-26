@@ -1,19 +1,12 @@
+import { Link, NavLink } from "react-router";
 import { FREE_BONUS_CENTS, type PlayerDTO } from "../../../shared/api.ts";
 import { formatCents, formatCountdown } from "../format.ts";
 import { useNow } from "../hooks/useNow.ts";
-import type { ConnectionStatus } from "../net/GameSocket.ts";
 import { Avatar } from "./Avatar.tsx";
-
-const STATUS_LABEL: Record<ConnectionStatus, string> = {
-  connecting: "Conectando",
-  open: "Ao vivo",
-  reconnecting: "Reconectando",
-};
 
 interface Props {
   player: PlayerDTO | null;
   bonusReadyAt: number | null;
-  status: ConnectionStatus;
   onClaimBonus: () => void;
   onOpenDeposit: () => void;
 }
@@ -42,27 +35,23 @@ function RewardsCard({ bonusReadyAt, onClaim }: { bonusReadyAt: number | null; o
   );
 }
 
-export function TopBar({ player, bonusReadyAt, status, onClaimBonus, onOpenDeposit }: Props) {
+export function TopBar({ player, bonusReadyAt, onClaimBonus, onOpenDeposit }: Props) {
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <div className="brand">
+        {/* <Link> troca de rota SEM recarregar a página (o WebSocket continua conectado) */}
+        <Link to="/" className="brand" aria-label="Rocket Crash: ir para o jogo">
           <span className="brand-logo" aria-hidden>
             🚀
           </span>
           <span>
             Rocket <strong>Crash</strong>
           </span>
-        </div>
+        </Link>
         <RewardsCard bonusReadyAt={bonusReadyAt} onClaim={onClaimBonus} />
       </div>
 
       <div className="topbar-right">
-        <span className={`conn conn-${status}`} title={STATUS_LABEL[status]}>
-          <span className="dot" />
-          <span className="conn-label">{STATUS_LABEL[status]}</span>
-        </span>
-
         {player && (
           <>
             <div className="balance-pill">
@@ -71,10 +60,11 @@ export function TopBar({ player, bonusReadyAt, status, onClaimBonus, onOpenDepos
                 +
               </button>
             </div>
-            <div className="me-chip">
+            {/* NavLink sabe se a rota está ativa: ganha a classe "active" quando estamos em /perfil */}
+            <NavLink to="/perfil" className="me-chip" title="Meu perfil">
               <Avatar name={player.name} seed={player.id} size={36} />
               <span className="me-name">{player.name}</span>
-            </div>
+            </NavLink>
           </>
         )}
       </div>

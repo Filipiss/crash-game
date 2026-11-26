@@ -21,7 +21,8 @@ import {
 import type { RoundSnapshot } from "../../shared/protocol.ts";
 import { AppError, STATUS_BY_CODE } from "./errors.ts";
 import type { CrashGame } from "./game.ts";
-import { promoBonusPercent, toPlayerDTO, type Player, type PlayerStore } from "./players.ts";
+import { normalizeProfile, validateProfile, type UpdateProfileRequest } from "../../shared/profile.ts";
+import { promoBonusPercent, toPlayerDTO, toProfileDTO, type Player, type PlayerStore } from "./players.ts";
 
 /**
  * Camada HTTP: traduz pedidos em chamadas ao jogo/carteira e respostas em JSON.
@@ -76,6 +77,28 @@ export function createApiRouter(game: CrashGame, players: PlayerStore): Router {
 
   router.get("/players/me", (req, res) => {
     res.json(toPlayerDTO(requirePlayer(req)));
+  });
+
+  // Perfil completo (dados fictícios + estatísticas reais). Só o dono vê: exige o token.
+  router.get("/players/me/profile", (req, res) => {
+    res.json(toProfileDTO(requirePlayer(req)));
+  });
+
+  // PUT = "substitua os dados do perfil por estes". Mesma validação do formulário (shared/profile.ts).
+  router.put("/players/me/profile", (req, res) => {
+    const player = requirePlayer(req);
+    const body = (req.body ?? {}) as Partial<Record<keyof UpdateProfileRequest, unknown>>;
+    const input: UpdateProfileRequest = {
+      fullName: typeof body.fullName === "string" ? body.fullName : "",
+      email: typeof body.email === "string" ? body.email : "",
+      phone: typeof body.phone === "string" ? body.phone : "",
+      city: typeof body.city === "string" ? body.city : "",
+    };
+    const firstError = Object.values(validateProfile(input))[0];
+    if (firstError) throw new AppError("INVALID_PROFILE", firstError);
+
+    players.updateProfile(player, normalizeProfile(input));
+    res.json(toProfileDTO(player));
   });
 
   // Fichas grátis (o intervalo entre resgates é controlado pelo servidor).
@@ -141,6 +164,7 @@ export function createApiRouter(game: CrashGame, players: PlayerStore): Router {
     // consegue se intrometer no meio (o JavaScript roda uma coisa por vez).
     const roundId = game.placeBet(player.id, player.name, amountCents, autoCashoutAt);
     players.debit(player, amountCents);
+    players.recordBet(player, amountCents); // estatísticas do perfil
 
     const body: BetResponse = { roundId, amountCents, autoCashoutAt, balanceCents: player.balanceCents };
     res.status(201).json(body);
@@ -153,6 +177,12 @@ export function createApiRouter(game: CrashGame, players: PlayerStore): Router {
 
     const body: CashoutResponse = { multiplier, payoutCents, balanceCents: player.balanceCents };
     res.json(body);
+  });
+
+  // Qualquer /api/... que não casou com nada acima: 404 em JSON (no formato padrão de
+  // erro), em vez da página HTML que o Express devolveria e o cliente não saberia ler.
+  router.use(() => {
+    throw new AppError("NOT_FOUND", "Rota da API não encontrada.");
   });
 
   return router;

@@ -1,5 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { FREE_BONUS_CENTS, FREE_BONUS_COOLDOWN_MS, type PlayerDTO } from "../../shared/api.ts";
+import type { ProfileDTO, ProfileStats, UpdateProfileRequest } from "../../shared/profile.ts";
 import { AppError } from "./errors.ts";
 
 const STARTING_BALANCE_CENTS = 1_000_00; // R$ 1.000,00 de fichas de mentira
@@ -20,6 +21,10 @@ export interface Player {
   balanceCents: number;
   /** Quando resgatou as fichas grátis pela última vez (0 = nunca). */
   lastBonusAt: number;
+  createdAt: number;
+  /** Dados pessoais FICTÍCIOS (gerados para a demo, editáveis no perfil). */
+  profile: UpdateProfileRequest;
+  stats: ProfileStats;
 }
 
 /** % de bônus de um código promocional, ou null se ele não existe. Não diferencia maiúsculas. */
@@ -55,6 +60,27 @@ const FAMOUS_NAMES = [
   "The Rock",
 ];
 
+// Dados pessoais fictícios: nomes genéricos, cidades e e-mails no domínio
+// example.com (reservado para exemplos: nunca é o e-mail de ninguém).
+const FIRST_NAMES = ["Ana", "Bruno", "Carla", "Diego", "Fernanda", "Gabriel", "Juliana", "Lucas", "Mariana", "Rafael", "Beatriz", "Thiago"];
+const LAST_NAMES = ["Souza", "Lima", "Mendes", "Rocha", "Alves", "Costa", "Ribeiro", "Martins", "Santos", "Oliveira", "Ferreira", "Barbosa"];
+const CITIES = ["São Paulo, SP", "Rio de Janeiro, RJ", "Belo Horizonte, MG", "Curitiba, PR", "Recife, PE", "Porto Alegre, RS", "Salvador, BA", "Florianópolis, SC"];
+
+const pick = <T>(list: readonly T[]): T => list[randomInt(list.length)]!;
+const digits = (n: number) => Array.from({ length: n }, () => randomInt(10)).join("");
+
+function fakeProfile(): UpdateProfileRequest {
+  const first = pick(FIRST_NAMES);
+  const last = pick(LAST_NAMES);
+  const slug = `${first}.${last}`.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return {
+    fullName: `${first} ${last}`,
+    email: `${slug}${randomInt(10, 1000)}@example.com`,
+    phone: `(${randomInt(11, 100)}) 9${digits(4)}-${digits(4)}`,
+    city: pick(CITIES),
+  };
+}
+
 /** Sorteia um nome que ninguém conectado está usando; se todos estiverem em uso, acrescenta um número. */
 function pickName(taken: Set<string>): string {
   const free = FAMOUS_NAMES.filter((name) => !taken.has(name));
@@ -78,6 +104,9 @@ export class PlayerStore {
       name: pickName(new Set([...this.byToken.values()].map((p) => p.name))),
       balanceCents: STARTING_BALANCE_CENTS,
       lastBonusAt: 0,
+      createdAt: Date.now(),
+      profile: fakeProfile(),
+      stats: { bets: 0, wageredCents: 0, wonCents: 0, bestMultiplier: null },
     };
     this.byToken.set(player.token, player);
     this.byId.set(player.id, player);
@@ -95,10 +124,22 @@ export class PlayerStore {
     player.balanceCents -= cents;
   }
 
-  /** Credita um prêmio. Chamado pelo jogo (cash-out manual OU automático). */
-  creditById(playerId: string, cents: number): void {
+  /** Registra uma aposta nas estatísticas do perfil. */
+  recordBet(player: Player, cents: number): void {
+    player.stats.bets++;
+    player.stats.wageredCents += cents;
+  }
+
+  /**
+   * Credita um prêmio. Chamado pelo jogo (cash-out manual OU automático).
+   * Jogadores simulados (bots) não estão aqui: o crédito deles é simplesmente ignorado.
+   */
+  creditById(playerId: string, cents: number, multiplier: number): void {
     const player = this.byId.get(playerId);
-    if (player) player.balanceCents += cents;
+    if (!player) return;
+    player.balanceCents += cents;
+    player.stats.wonCents += cents;
+    player.stats.bestMultiplier = Math.max(player.stats.bestMultiplier ?? 0, multiplier);
   }
 
   /** Recarga SIMULADA: só soma fichas virtuais (o valor já foi validado na rota). */
@@ -119,9 +160,25 @@ export class PlayerStore {
     player.balanceCents += FREE_BONUS_CENTS;
     player.lastBonusAt = Date.now();
   }
+
+  /** Salva os dados do perfil (já validados e normalizados na rota). */
+  updateProfile(player: Player, profile: UpdateProfileRequest): void {
+    player.profile = { ...profile };
+  }
 }
 
 /** Converte para o formato público: o token NUNCA sai daqui por engano. */
 export function toPlayerDTO(player: Player): PlayerDTO {
   return { id: player.id, name: player.name, balanceCents: player.balanceCents, nextBonusInMs: bonusWaitMs(player) };
+}
+
+/** Perfil completo: só o próprio jogador vê (a rota exige o token dele). */
+export function toProfileDTO(player: Player): ProfileDTO {
+  return {
+    playerId: player.id,
+    nickname: player.name,
+    ...player.profile,
+    memberSince: player.createdAt,
+    stats: { ...player.stats },
+  };
 }

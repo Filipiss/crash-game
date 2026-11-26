@@ -11,6 +11,7 @@ import type {
   PlayerDTO,
   PromoResponse,
 } from "../../../shared/api.ts";
+import type { ProfileDTO, UpdateProfileRequest } from "../../../shared/profile.ts";
 
 /** Erro da API com o `code` do servidor (ou NETWORK, quando nem chegou lá). */
 export class ApiError extends Error {
@@ -24,7 +25,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: "GET" | "POST", path: string, options: { token?: string; body?: unknown } = {}): Promise<T> {
+async function request<T>(method: "GET" | "POST" | "PUT", path: string, options: { token?: string; body?: unknown } = {}): Promise<T> {
   const { token, body } = options;
   let res: Response;
   try {
@@ -53,6 +54,8 @@ async function request<T>(method: "GET" | "POST", path: string, options: { token
 export const api = {
   createPlayer: () => request<CreatePlayerResponse>("POST", "/players"),
   me: (token: string) => request<PlayerDTO>("GET", "/players/me", { token }),
+  getProfile: (token: string) => request<ProfileDTO>("GET", "/players/me/profile", { token }),
+  updateProfile: (token: string, body: UpdateProfileRequest) => request<ProfileDTO>("PUT", "/players/me/profile", { token, body }),
   claimBonus: (token: string) => request<BonusResponse>("POST", "/players/me/bonus", { token }),
   checkPromo: (code: string) => request<PromoResponse>("GET", `/promo/${encodeURIComponent(code)}`),
   /** Recarga SIMULADA: o servidor só credita fichas virtuais. */

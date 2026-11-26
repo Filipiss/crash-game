@@ -30,5 +30,7 @@ export const STATUS_BY_CODE: Record<ErrorCode, number> = {
   INVALID_PAYMENT_METHOD: 400,
   INVALID_PROMO: 404, // 404: esse código promocional "não existe"
   BONUS_COOLDOWN: 429, // 429 Too Many Requests: "calma, tente de novo mais tarde"
+  INVALID_PROFILE: 400,
+  NOT_FOUND: 404,
   INTERNAL: 500,
 };

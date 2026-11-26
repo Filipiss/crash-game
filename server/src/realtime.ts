@@ -18,9 +18,11 @@ function send(ws: WebSocket, msg: ServerMessage): void {
  * via REST, que tem resposta, status HTTP e é fácil de testar. O WebSocket é o
  * "alto-falante" que avisa todo mundo do que aconteceu.
  */
-export function attachRealtime(httpServer: Server, game: CrashGame): void {
+export function attachRealtime(httpServer: Server, game: CrashGame, extraOnline: () => number = () => 0): void {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
   const alive = new WeakMap<WebSocket, boolean>();
+  /** Conexões reais + jogadores simulados (os bots não têm WebSocket). */
+  const online = () => wss.clients.size + extraOnline();
 
   /** Broadcast: manda para todos os clientes conectados. */
   function broadcast(msg: ServerMessage): void {
@@ -39,7 +41,7 @@ export function attachRealtime(httpServer: Server, game: CrashGame): void {
     ws.on("pong", () => alive.set(ws, true));
     ws.on("close", () => {
       console.log(`[ws] cliente saiu (${wss.clients.size} conectados)`);
-      broadcast({ type: "presence", online: wss.clients.size });
+      broadcast({ type: "presence", online: online() });
     });
     console.log(`[ws] cliente entrou (${wss.clients.size} conectados)`);
 
@@ -51,14 +53,18 @@ export function attachRealtime(httpServer: Server, game: CrashGame): void {
       history: game.getHistory(),
       bets: game.getBets(),
       winners: game.getWinners(),
-      online: wss.clients.size,
+      online: online(),
     });
     // Os outros ficam sabendo que chegou mais alguém.
-    broadcast({ type: "presence", online: wss.clients.size });
+    broadcast({ type: "presence", online: online() });
   });
 
-  // Todo evento do jogo vai para todos.
-  game.onEvent(broadcast);
+  // Todo evento do jogo vai para todos. A cada rodada nova a sala "muda"
+  // (bots entram e saem), então reenviamos a contagem de online também.
+  game.onEvent((msg) => {
+    broadcast(msg);
+    if (msg.type === "betting") broadcast({ type: "presence", online: online() });
+  });
 
   // Heartbeat: a cada 30s mandamos um "ping". Quem não respondeu "pong" desde
   // o último ping caiu sem avisar (wifi caiu, aba congelou): derrubamos a conexão.

@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Route, Routes } from "react-router";
 import type { DepositRequest } from "../../shared/api.ts";
-import { BetPanel, type BetIntent } from "./components/BetPanel.tsx";
+import type { BetIntent } from "./components/BetPanel.tsx";
 import { DepositModal } from "./components/DepositModal.tsx";
-import { GameCanvas } from "./components/GameCanvas.tsx";
-import { HistoryBar } from "./components/HistoryBar.tsx";
-import { LiveWinners } from "./components/LiveWinners.tsx";
-import { PlayersSummary } from "./components/PlayersSummary.tsx";
 import { Toasts } from "./components/Toasts.tsx";
 import { TopBar } from "./components/TopBar.tsx";
 import { formatCents, formatMultiplier } from "./format.ts";
@@ -13,6 +10,18 @@ import { useGameSocket } from "./hooks/useGameSocket.ts";
 import { useSession } from "./hooks/useSession.ts";
 import { useToasts } from "./hooks/useToasts.ts";
 import { api, ApiError } from "./net/api.ts";
+import { GamePage } from "./pages/GamePage.tsx";
+import { NotFoundPage } from "./pages/NotFoundPage.tsx";
+import { ProfilePage, type RunAction } from "./pages/ProfilePage.tsx";
+
+/** Mensagens de crash: uma diferente a cada rodada perdida, no tema do espaço. */
+const CRASH_MESSAGES = [
+  (x: string) => `💥 Kaboom! O foguete explodiu em ${x}. Bora pra próxima!`,
+  (x: string) => `☄️ Houston, temos um problema: crash em ${x}!`,
+  (x: string) => `🪐 Perdido no espaço em ${x}. A próxima decolagem é sua!`,
+  (x: string) => `💫 Virou poeira estelar em ${x}. Respira e tenta de novo!`,
+  (x: string) => `🛸 Abduzido em ${x}! Os aliens agradecem a contribuição.`,
+];
 
 /**
  * Fluxo de dados do app:
@@ -54,7 +63,8 @@ export function App() {
     if (game.phase !== "crashed" || !myBet || myBet.cashedOutAt !== null) return;
     if (lostRoundRef.current === game.roundId) return; // avisa só uma vez por rodada
     lostRoundRef.current = game.roundId;
-    push("loss", `💥 Crash em ${formatMultiplier(game.crashPoint ?? 1)}. Você perdeu ${formatCents(myBet.amountCents)}.`);
+    const message = CRASH_MESSAGES[Math.floor(Math.random() * CRASH_MESSAGES.length)]!;
+    push("loss", message(formatMultiplier(game.crashPoint ?? 1)));
   }, [game.phase, game.roundId, game.crashPoint, myBet, push]);
 
   // Auto cash-out: o servidor me pagou sozinho. Não houve resposta REST,
@@ -73,7 +83,7 @@ export function App() {
    * Executa uma ação REST com: trava contra clique duplo, tratamento de erro
    * padronizado e recuperação de sessão expirada.
    */
-  const run = useCallback(
+  const run: RunAction = useCallback(
     async <T,>(action: (token: string) => Promise<T>): Promise<T | null> => {
       // ref (síncrona) e não só state: dois cliques no mesmo frame veriam o state antigo
       if (!session || pendingRef.current) return null;
@@ -147,41 +157,44 @@ export function App() {
 
   return (
     <div className="app">
+      {/* O topo fica FORA das rotas: aparece em todas as páginas */}
       <TopBar
         player={session?.player ?? null}
         bonusReadyAt={session?.bonusReadyAt ?? null}
-        status={status}
         onClaimBonus={claimBonus}
         onOpenDeposit={openDeposit}
       />
 
-      <main className="layout">
-        <aside className="side card">
-          <BetPanel
-            game={game}
-            myBet={myBet}
-            myAutoTarget={myAutoTarget}
-            queued={queued}
-            balanceCents={balance}
-            connected={status === "open"}
-            pending={pending}
-            onBet={placeBet}
-            onCancelQueued={() => setQueued(null)}
-            onCashout={cashOut}
-            onRefill={openDeposit}
-          />
-          <PlayersSummary bets={game.bets} online={game.online} />
-          {sessionError && <p className="session-error">Não foi possível criar sua conta: {sessionError}</p>}
-        </aside>
-
-        <section className="stage card">
-          <HistoryBar history={game.history} />
-          <GameCanvas state={game} />
-          {status !== "open" && <div className="canvas-overlay">Reconectando ao servidor…</div>}
-        </section>
-
-        <LiveWinners winners={game.winners} myId={myId} />
-      </main>
+      {/* Rotas do app. Só o miolo da página troca; WebSocket, sessão e toasts continuam vivos. */}
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <GamePage
+              game={game}
+              status={status}
+              myId={myId}
+              myBet={myBet}
+              myAutoTarget={myAutoTarget}
+              queued={queued}
+              balanceCents={balance}
+              pending={pending}
+              sessionError={sessionError}
+              onBet={placeBet}
+              onCancelQueued={() => setQueued(null)}
+              onCashout={cashOut}
+              onOpenDeposit={openDeposit}
+            />
+          }
+        />
+        <Route
+          path="/perfil"
+          element={
+            <ProfilePage session={session} run={run} onOpenDeposit={openDeposit} onSaved={() => push("info", "✅ Perfil atualizado!")} />
+          }
+        />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
 
       {depositOpen && <DepositModal onClose={closeDeposit} onDeposit={deposit} />}
       <Toasts toasts={toasts} />

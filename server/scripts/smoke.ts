@@ -11,6 +11,7 @@ import type {
   PlayerDTO,
   PromoResponse,
 } from "../../shared/api.ts";
+import type { ProfileDTO } from "../../shared/profile.ts";
 import { msToReach } from "../../shared/crash-math.ts";
 import type { RoundSnapshot } from "../../shared/protocol.ts";
 
@@ -81,6 +82,23 @@ await expectError("pagar com skins", "INVALID_PAYMENT_METHOD", () =>
 await expectError("recarga abaixo do mínimo", "INVALID_DEPOSIT", () =>
   api("POST", "/players/me/deposit", token, { amountCents: 50, method: "pix" }),
 );
+
+// Perfil (dados fictícios) e rotas
+const profile = await api<ProfileDTO>("GET", "/players/me/profile", token);
+console.log(`✓ perfil: ${profile.nickname} / ${profile.fullName} <${profile.email}>`);
+await expectError("perfil com e-mail inválido", "INVALID_PROFILE", () =>
+  api("PUT", "/players/me/profile", token, { ...profile, email: "nao-e-email" }),
+);
+const updated = await api<ProfileDTO>("PUT", "/players/me/profile", token, {
+  fullName: "  Teste   Smoke ",
+  email: "SMOKE@Example.com",
+  phone: "(11) 91234-5678",
+  city: "Campinas, SP",
+});
+const normalizedOk = updated.fullName === "Teste Smoke" && updated.email === "smoke@example.com";
+if (!normalizedOk) process.exitCode = 1;
+console.log(`${normalizedOk ? "✓" : "✗"} perfil salvo e normalizado: "${updated.fullName}" <${updated.email}>`);
+await expectError("rota da API inexistente", "NOT_FOUND", () => api("GET", "/nao-existe"));
 
 const round = await waitFor((r) => r.phase === "betting" && r.bettingMsLeft > 1000);
 console.log(`✓ rodada ${round.roundId} aceitando apostas (${round.bettingMsLeft}ms restantes)`);
