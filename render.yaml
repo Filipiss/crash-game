@@ -1,0 +1,20 @@
+# Deploy no Render (https://render.com) como "Blueprint": o Render lê este arquivo
+# e cria o serviço sozinho. Um único serviço Node entrega tudo na mesma origem:
+# a página (client/dist), a API REST (/api) e o WebSocket (/ws).
+services:
+  - type: web
+    name: rocket-crash
+    runtime: node
+    plan: free
+    # Região nos EUA mais próxima do Brasil (menos latência no WebSocket).
+    region: virginia
+    # --include=dev: o build precisa do Vite e do TypeScript, que são devDependencies.
+    buildCommand: npm ci --include=dev && npm run build
+    # O servidor roda TypeScript direto no Node 24 (sem etapa de compilação).
+    startCommand: npm start
+    # O Render só manda tráfego quando esta rota responde 200.
+    healthCheckPath: /api/health
+    autoDeploy: true # cada push na branch principal publica de novo
+    envVars:
+      - key: NODE_VERSION
+        value: "24"

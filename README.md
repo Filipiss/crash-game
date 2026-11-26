@@ -36,6 +36,16 @@ npm start            # http://localhost:3001
 
 **Modo debug:** acrescente `?debug` à URL para ver FPS, tempo por frame, custo do `update()` e partículas, direto no canvas. Funciona no celular também.
 
+### Deploy (Render)
+
+O jogo precisa de **WebSocket** e de um **processo Node sempre ligado** (o loop das rodadas roda no servidor), então hospedagens serverless (Vercel, Netlify) não servem. O [`render.yaml`](render.yaml) descreve o serviço para o [Render](https://render.com):
+
+1. Crie uma conta no Render entrando com o GitHub.
+2. **New → Blueprint** e escolha este repositório.
+3. Confirme em **Apply**. O Render roda `npm ci --include=dev && npm run build` e depois `npm start`.
+
+Depois disso, cada push na branch principal publica de novo sozinho. No plano grátis o serviço "dorme" após ~15 min sem acesso, e a primeira visita seguinte leva cerca de 50 s para acordar. Como os dados ficam em memória, também zeram quando o serviço reinicia, e o cliente cria uma conta nova automaticamente.
+
 ### Scripts úteis
 
 | Comando | O que faz |
